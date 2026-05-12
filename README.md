@@ -1,6 +1,6 @@
 # Dune Awakening Dashboard
 
-[![Version](https://img.shields.io/badge/version-0.1.1--beta-blue)](https://github.com/Sutider/dune-dashboard)
+[![Version](https://img.shields.io/badge/version-0.1.2--beta-blue)](https://github.com/Sutider/dune-dashboard)
 
 A comprehensive web-based management dashboard for Dune: Awakening private servers. Provides real-time monitoring, player management, chat logging, file browsing, and server administration tools.
 
