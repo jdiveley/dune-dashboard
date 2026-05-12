@@ -24,6 +24,9 @@ A comprehensive web-based management dashboard for Dune: Awakening private serve
 - **Admin Tools**: Ban management, IP detection, kick/unban functionality, and player history.
 - **Vehicles & Buildings**: Track owned vehicles, modules, and player structures.
 - **Auto-Update**: Background checker polls GitHub for new commits. Safe file replacement preserves your settings, logs, and SSH keys. One-click update from the dashboard.
+- **Remote Access**: Built-in support for HTTPS and binding to `0.0.0.0` for secure remote management.
+- **Settings Migration**: Automatically adds new configuration options to `settings.yaml` when updating, so you never miss a feature.
+- **Cross-Platform**: Works on Windows (`.bat`/`.ps1`) and Linux/macOS (`.sh`).
 
 ## License
 
@@ -78,6 +81,21 @@ All settings are stored in `settings.yaml`. The setup script generates this auto
 - `kubernetes.namespace`: Auto-detected K8s namespace
 - `database.port`: Local port for database tunnel
 - `auth.username` / `auth.password`: Dashboard login credentials
+
+### Remote Access
+
+During setup, answer **y** to "Enable remote access?" to:
+- Bind to `0.0.0.0` (accessible from other machines)
+- Auto-generate SSL certificates for HTTPS
+- Enable secure remote connections via `https://YOUR_IP:5050`
+
+You can also manually edit `settings.yaml` later:
+```yaml
+dashboard:
+  host: 0.0.0.0
+  ssl_cert: ssl/cert.pem
+  ssl_key: ssl/key.pem
+```
 
 ## Project Structure
 

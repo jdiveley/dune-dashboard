@@ -3,6 +3,7 @@
 import os
 import yaml
 import logging
+import copy
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,8 @@ DEFAULTS = {
         'port': 5050,
         'debug': False,
         'secret_key': 'change-me-to-random-string',
+        'ssl_cert': None,
+        'ssl_key': None,
     },
     'database': {
         'host': '127.0.0.1',
@@ -68,12 +71,51 @@ def deep_merge(base, override):
     return result
 
 
+def _find_missing_keys(defaults, current, path=""):
+    """Find keys present in defaults but missing in current."""
+    missing = []
+    for key, val in defaults.items():
+        new_path = f"{path}.{key}" if path else key
+        if key not in current:
+            missing.append(new_path)
+        elif isinstance(val, dict) and isinstance(current.get(key), dict):
+            missing.extend(_find_missing_keys(val, current[key], new_path))
+    return missing
+
+
+def _apply_defaults_to_file(settings_path, defaults):
+    """Add missing default keys to settings.yaml and notify user."""
+    if not os.path.exists(settings_path):
+        return False
+
+    with open(settings_path, 'r') as f:
+        try:
+            current = yaml.safe_load(f) or {}
+        except Exception:
+            return False
+
+    missing = _find_missing_keys(defaults, current)
+    if not missing:
+        return False
+
+    # Merge and save
+    merged = deep_merge(defaults, current)
+    try:
+        with open(settings_path, 'w') as f:
+            yaml.dump(merged, f, default_flow_style=False, sort_keys=False)
+        print(f"\n  [INFO] Settings updated with new defaults: {', '.join(missing)}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update settings file: {e}")
+        return False
+
+
 def load_settings(settings_path=None):
     """Load settings from YAML file with defaults and env var overrides."""
     if settings_path is None:
         settings_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'settings.yaml')
 
-    settings = DEFAULTS.copy()
+    settings = copy.deepcopy(DEFAULTS)
 
     if os.path.exists(settings_path):
         try:
@@ -86,6 +128,9 @@ def load_settings(settings_path=None):
             logger.warning("Using default settings")
     else:
         logger.warning(f"Settings file not found at {settings_path}, using defaults")
+
+    # Auto-apply new defaults if missing
+    _apply_defaults_to_file(settings_path, DEFAULTS)
 
     env_overrides = {}
 

@@ -13,10 +13,12 @@ server:
 
 # Dashboard
 dashboard:
-  host: "127.0.0.1"            # Bind address (use 127.0.0.1 for security)
+  host: "127.0.0.1"            # Bind address (use 0.0.0.0 for remote access)
   port: 5050                   # Port number
   debug: false                 # Set true for development only
   secret_key: "change-me-to-random-string"  # For session security
+  ssl_cert: null               # Path to SSL cert (null = HTTP only)
+  ssl_key: null                # Path to SSL key (null = HTTP only)
 
 # Database (accessed via SSH tunnel)
 database:

@@ -29,6 +29,12 @@ dune-tunnel-key
 dune-awakening-server-sshKey
 internal-scripts/ssh/sshKey
 
+# SSL Certificates
+ssl/
+
+# Backups
+backups/
+
 # IDE
 .vscode/
 .idea/

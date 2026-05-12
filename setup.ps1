@@ -209,41 +209,66 @@ Write-Host ""
 Write-Host "  Review settings (press Enter to accept, or type new value):" -ForegroundColor Cyan
 Write-Host ""
 
-Write-Host "  Server Host: $ServerHost"
+Write-Host "  Server Host: $ServerHost (IP of your game server VM)"
 
-$val = Read-Host "  Server User [$ServerUser]"
+$val = Read-Host "  Server User [$ServerUser] (SSH username for the VM)"
 if ($val) { $ServerUser = $val }
 
-Write-Host "  SSH Key Path: $FoundKey"
+Write-Host "  SSH Key Path: $FoundKey (Path to your private SSH key)"
 
 if (-not $K8sNamespace) {
     Write-Host "  [INFO] To find your namespace, run: ssh dune@YOUR_IP 'sudo kubectl get namespaces'" -ForegroundColor Cyan
-    $K8sHint = "funcom-seabass-<id>"
+    $K8sHint = "funcom-seabass-<id> (Kubernetes cluster namespace)"
 } else {
-    $K8sHint = $K8sNamespace
+    $K8sHint = "$K8sNamespace (Kubernetes cluster namespace)"
 }
 
 $val = Read-Host "  K8s Namespace [$K8sHint]"
 if ($val) { $K8sNamespace = $val }
 elseif (-not $K8sNamespace) { $K8sNamespace = "" }
 
-$val = Read-Host "  Dashboard Port [$DashboardPort]"
+$val = Read-Host "  Dashboard Port [$DashboardPort] (Local web access port)"
 if ($val) { $DashboardPort = $val }
 
-$val = Read-Host "  DB Local Port [$DbPort]"
+$val = Read-Host "  DB Local Port [$DbPort] (Local database tunnel port)"
 if ($val) { $DbPort = $val }
 
-$val = Read-Host "  Director Port [$DirectorPort]"
+$val = Read-Host "  Director Port [$DirectorPort] (Director API port)"
 if ($val) { $DirectorPort = $val }
 
-$val = Read-Host "  FileBrowser Port [$FileBrowserPort]"
+$val = Read-Host "  FileBrowser Port [$FileBrowserPort] (File manager port)"
 if ($val) { $FileBrowserPort = $val }
 
-$val = Read-Host "  Auth Username [$AuthUser]"
+$val = Read-Host "  Auth Username [$AuthUser] (Dashboard login name)"
 if ($val) { $AuthUser = $val }
 
-$val = Read-Host "  Auth Password [$AuthPass]"
+$val = Read-Host "  Auth Password [$AuthPass] (Dashboard login password)"
 if ($val) { $AuthPass = $val }
+
+# Remote access & SSL
+Write-Host ""
+$RemoteAccess = Read-Host "  Enable remote access? (y/N)"
+$EnableRemote = ($RemoteAccess -eq 'y' -or $RemoteAccess -eq 'Y')
+$SslCert = "null"
+$SslKey = "null"
+
+if ($EnableRemote) {
+    $DashHost = "0.0.0.0"
+    $CertDir = Join-Path $ProjectRoot "ssl"
+    if (-not (Test-Path $CertDir)) { New-Item -ItemType Directory -Path $CertDir -Force | Out-Null }
+    $SslCertPath = Join-Path $CertDir "cert.pem"
+    $SslKeyPath = Join-Path $CertDir "key.pem"
+    
+    if (-not (Test-Path $SslCertPath) -or -not (Test-Path $SslKeyPath)) {
+        Write-Host "  Generating SSL certificate..." -ForegroundColor Yellow
+        python -c "from app.utils.ssl import generate_cert; generate_cert('$SslCertPath', '$SslKeyPath')"
+    }
+    $SslCert = "'$SslCertPath'"
+    $SslKey = "'$SslKeyPath'"
+    Write-Host "  Remote access enabled with HTTPS" -ForegroundColor Green
+} else {
+    $DashHost = "127.0.0.1"
+}
 
 Write-Host ""
 Write-Host "[5/6] Saving settings..." -ForegroundColor Yellow
@@ -260,10 +285,12 @@ server:
   ssh_key: '$sshKeyPath'
 
 dashboard:
-  host: 127.0.0.1
+  host: $DashHost
   port: $DashboardPort
   debug: false
   secret_key: $secret
+  ssl_cert: $SslCert
+  ssl_key: $SslKey
 
 database:
   host: 127.0.0.1

@@ -118,6 +118,7 @@ def register_routes(app, services, settings):
 
     # Overview
     @app.route('/')
+    @login_required
     def overview():
         try:
             counts = player_svc.get_overview_counts()
@@ -134,6 +135,7 @@ def register_routes(app, services, settings):
 
     # Players list
     @app.route('/players')
+    @login_required
     def players():
         try:
             search = request.args.get('search', '')
@@ -159,6 +161,7 @@ def register_routes(app, services, settings):
 
     # Player detail
     @app.route('/players/<int:player_id>')
+    @login_required
     def player_detail(player_id):
         try:
             player = player_svc.get_player_detail(player_id)
@@ -198,6 +201,7 @@ def register_routes(app, services, settings):
 
     # Vehicles
     @app.route('/vehicles')
+    @login_required
     def vehicles():
         try:
             vehicles_list = vehicle_svc.get_all_vehicles()
@@ -208,6 +212,7 @@ def register_routes(app, services, settings):
 
     # Vehicle detail
     @app.route('/vehicles/<int:vehicle_id>')
+    @login_required
     def vehicle_detail(vehicle_id):
         try:
             vehicle = vehicle_svc.get_vehicle(vehicle_id)
@@ -225,6 +230,7 @@ def register_routes(app, services, settings):
 
     # Guilds
     @app.route('/guilds')
+    @login_required
     def guilds():
         try:
             guilds_list = db.query("""
@@ -244,6 +250,7 @@ def register_routes(app, services, settings):
 
     # Guild detail
     @app.route('/guilds/<int:guild_id>')
+    @login_required
     def guild_detail(guild_id):
         try:
             guild = db.query("""
@@ -281,6 +288,7 @@ def register_routes(app, services, settings):
 
     # Buildings
     @app.route('/buildings')
+    @login_required
     def buildings():
         try:
             buildings_list = db.query("""
@@ -306,6 +314,7 @@ def register_routes(app, services, settings):
 
     # Events
     @app.route('/events')
+    @login_required
     def events_page():
         game_events = []
         event_logs = []
@@ -321,11 +330,13 @@ def register_routes(app, services, settings):
 
     # Chat
     @app.route('/chat')
+    @login_required
     def chat_logs():
         return render_template('chat.html', max_lines=200)
 
     # Shell
     @app.route('/shell')
+    @login_required
     def shell_page():
         pods = []
         ssh_command = ''
@@ -348,22 +359,26 @@ def register_routes(app, services, settings):
 
     # Files (stub)
     @app.route('/files')
+    @login_required
     def files_page():
         return render_template('files.html')
 
     @app.route('/files/view')
+    @login_required
     def files_view():
         path = request.args.get('path', '')
         return render_template('file_view.html', path=path)
 
     # Director
     @app.route('/director')
+    @login_required
     def director_page():
         director_port = settings.get('director', {}).get('port', 32479)
         return render_template('director.html', director_port=director_port)
 
     # Admin
     @app.route('/admin')
+    @login_required
     def admin_page():
         try:
             bans = admin_svc.get_bans()
@@ -373,6 +388,7 @@ def register_routes(app, services, settings):
 
     # Server status
     @app.route('/server')
+    @login_required
     def server_status():
         try:
             active_servers = db.query("""

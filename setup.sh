@@ -159,16 +159,49 @@ echo ""
 echo "  Review settings (press Enter to accept, or type new value):"
 echo ""
 
-read -rp "  Server Host [$SERVER_HOST]: " VAL; [ -n "$VAL" ] && SERVER_HOST="$VAL"
-read -rp "  Server User [$SERVER_USER]: " VAL; [ -n "$VAL" ] && SERVER_USER="$VAL"
-read -rp "  SSH Key Path [$FOUND_KEY]: " VAL; [ -n "$VAL" ] && FOUND_KEY="$VAL"
-read -rp "  K8s Namespace [$K8S_NAMESPACE]: " VAL; [ -n "$VAL" ] && K8S_NAMESPACE="$VAL"
-read -rp "  Dashboard Port [$DASHBOARD_PORT]: " VAL; [ -n "$VAL" ] && DASHBOARD_PORT="$VAL"
-read -rp "  DB Local Port [$DB_PORT]: " VAL; [ -n "$VAL" ] && DB_PORT="$VAL"
-read -rp "  Director Port [$DIRECTOR_PORT]: " VAL; [ -n "$VAL" ] && DIRECTOR_PORT="$VAL"
-read -rp "  FileBrowser Port [$FILEBROWSER_PORT]: " VAL; [ -n "$VAL" ] && FILEBROWSER_PORT="$VAL"
-read -rp "  Auth Username [$AUTH_USER]: " VAL; [ -n "$VAL" ] && AUTH_USER="$VAL"
-read -rp "  Auth Password [$AUTH_PASS]: " VAL; [ -n "$VAL" ] && AUTH_PASS="$VAL"
+read -rp "  Server Host [$SERVER_HOST] (IP of your game server VM): " VAL; [ -n "$VAL" ] && SERVER_HOST="$VAL"
+read -rp "  Server User [$SERVER_USER] (SSH username for the VM): " VAL; [ -n "$VAL" ] && SERVER_USER="$VAL"
+read -rp "  SSH Key Path [$FOUND_KEY] (Path to your private SSH key): " VAL; [ -n "$VAL" ] && FOUND_KEY="$VAL"
+
+if [ -z "$K8S_NAMESPACE" ]; then
+    echo "  [INFO] To find your namespace, run: ssh dune@YOUR_IP 'sudo kubectl get namespaces'"
+    K8S_HINT="funcom-seabass-<id> (Kubernetes cluster namespace)"
+else
+    K8S_HINT="$K8S_NAMESPACE (Kubernetes cluster namespace)"
+fi
+
+read -rp "  K8s Namespace [$K8S_HINT]: " VAL; [ -n "$VAL" ] && K8S_NAMESPACE="$VAL"
+read -rp "  Dashboard Port [$DASHBOARD_PORT] (Local web access port): " VAL; [ -n "$VAL" ] && DASHBOARD_PORT="$VAL"
+read -rp "  DB Local Port [$DB_PORT] (Local database tunnel port): " VAL; [ -n "$VAL" ] && DB_PORT="$VAL"
+read -rp "  Director Port [$DIRECTOR_PORT] (Director API port): " VAL; [ -n "$VAL" ] && DIRECTOR_PORT="$VAL"
+read -rp "  FileBrowser Port [$FILEBROWSER_PORT] (File manager port): " VAL; [ -n "$VAL" ] && FILEBROWSER_PORT="$VAL"
+read -rp "  Auth Username [$AUTH_USER] (Dashboard login name): " VAL; [ -n "$VAL" ] && AUTH_USER="$VAL"
+read -rp "  Auth Password [$AUTH_PASS] (Dashboard login password): " VAL; [ -n "$VAL" ] && AUTH_PASS="$VAL"
+
+# Remote access & SSL
+echo ""
+read -rp "  Enable remote access? (y/N): " REMOTE_ANSWER
+ENABLE_REMOTE=false
+SSL_CERT="null"
+SSL_KEY="null"
+
+if [[ "$REMOTE_ANSWER" == "y" || "$REMOTE_ANSWER" == "Y" ]]; then
+    DASH_HOST="0.0.0.0"
+    CERT_DIR="$PROJECT_ROOT/ssl"
+    mkdir -p "$CERT_DIR"
+    SSL_CERT_PATH="$CERT_DIR/cert.pem"
+    SSL_KEY_PATH="$CERT_DIR/key.pem"
+    
+    if [ ! -f "$SSL_CERT_PATH" ] || [ ! -f "$SSL_KEY_PATH" ]; then
+        echo "  Generating SSL certificate..."
+        $PYTHON -c "from app.utils.ssl import generate_cert; generate_cert('$SSL_CERT_PATH', '$SSL_KEY_PATH')"
+    fi
+    SSL_CERT="'$SSL_CERT_PATH'"
+    SSL_KEY="'$SSL_KEY_PATH'"
+    echo "  Remote access enabled with HTTPS"
+else
+    DASH_HOST="127.0.0.1"
+fi
 
 echo ""
 echo "[5/6] Saving settings..."
@@ -189,10 +222,12 @@ server:
   ssh_key: $SSH_KEY_YAML
 
 dashboard:
-  host: 127.0.0.1
+  host: $DASH_HOST
   port: $DASHBOARD_PORT
   debug: false
   secret_key: $SECRET
+  ssl_cert: $SSL_CERT
+  ssl_key: $SSL_KEY
 
 database:
   host: 127.0.0.1
