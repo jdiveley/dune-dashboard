@@ -7,7 +7,7 @@
 
 # Server connection
 server:
-  host: "65.21.198.100"       # VM IP address
+  host: "YOUR_SERVER_IP"       # VM IP address
   user: "dune"                 # SSH username
   ssh_key: null                # Path to SSH key (null = auto-detect)
 
