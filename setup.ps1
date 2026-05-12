@@ -161,6 +161,19 @@ $FileBrowserPort = "18888"
 $AuthUser = "admin"
 $AuthPass = "changeme"
 
+# Try to detect server IP from known_hosts
+$KnownHosts = Join-Path $env:USERPROFILE ".ssh\known_hosts"
+if (Test-Path $KnownHosts) {
+    $hosts = Select-String -Path $KnownHosts -Pattern '^\d+\.\d+\.\d+\.\d+' | ForEach-Object {
+        if ($_ -match '^(\d+\.\d+\.\d+\.\d+)') { $matches[1] }
+    } | Select-Object -Unique
+    if ($hosts.Count -gt 0) {
+        $ServerHost = $hosts[-1]
+        Write-Host "  Detected previous server IP: $ServerHost" -ForegroundColor Green
+    }
+}
+
+# Test SSH if we have a key and a real IP
 if ($FoundKey -and $ServerHost -ne "YOUR_SERVER_IP") {
     # Test SSH
     $testOut = ssh -i $FoundKey -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "dune@$ServerHost" "echo ok" 2>$null

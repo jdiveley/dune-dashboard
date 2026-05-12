@@ -130,6 +130,17 @@ FILEBROWSER_PORT="18888"
 AUTH_USER="admin"
 AUTH_PASS="changeme"
 
+# Try to detect server IP from known_hosts
+KNOWN_HOSTS="$HOME/.ssh/known_hosts"
+if [ -f "$KNOWN_HOSTS" ]; then
+    DETECTED_IP=$(grep -oE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' "$KNOWN_HOSTS" | tail -1)
+    if [ -n "$DETECTED_IP" ]; then
+        SERVER_HOST="$DETECTED_IP"
+        echo "  Detected previous server IP: $SERVER_HOST"
+    fi
+fi
+
+# Test SSH if we have a key and a real IP
 if [ -n "$FOUND_KEY" ] && [ "$SERVER_HOST" != "YOUR_SERVER_IP" ]; then
     if ssh -i "$FOUND_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "dune@$SERVER_HOST" "echo ok" &>/dev/null; then
         echo "  SSH connection OK"

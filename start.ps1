@@ -133,9 +133,17 @@ Write-Host "[OK]   SSH tunnel up on localhost:$LocalPort" -ForegroundColor Green
 
 # Start DB port-forward on VM
 Write-Host "[2/4] Starting DB port-forward on VM..." -ForegroundColor Yellow
+
+if (-not $Namespace -or $Namespace -eq '') {
+    Write-Host "[ERROR] Kubernetes namespace is empty." -ForegroundColor Red
+    Write-Host "  Edit settings.yaml and set kubernetes.namespace, or re-run setup.ps1 with SSH access." -ForegroundColor Yellow
+    Stop-Process -Id $sshTunnel.Id -Force -ErrorAction SilentlyContinue
+    exit 1
+}
+
 $DBService = "${Namespace}-db-dbdepl-svc"
 
-# Try to find the actual DB service name if the default fails
+# Try to find the actual DB service name
 $pfCheck = ssh -i $SSHKey -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 ${SSHUser}@${SSHHost} "sudo kubectl get svc -n ${Namespace} -o name" 2>$null
 if ($pfCheck) {
     $dbSvc = ($pfCheck -split "`n") | Where-Object { $_ -match 'db.*svc' -or $_ -match 'postgres' -or $_ -match 'pg' } | Select-Object -First 1
