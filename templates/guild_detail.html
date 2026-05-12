@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ guild.guild_name if guild else 'Guild' }} - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+{% if tunnel_down %}
+<div class="error-banner danger"><strong>SSH Tunnel Not Detected</strong></div>
+{% elif db_error %}
+<div class="error-banner danger"><strong>Database Error:</strong> {{ db_error }}</div>
+{% elif not_found %}
+<div class="error-banner danger"><strong>Guild Not Found</strong></div>
+{% else %}
+
+<div class="page-header">
+    <h1>{{ guild.guild_name }}</h1>
+    <p>Guild ID: {{ guild.guild_id }}</p>
+</div>
+
+<div class="detail-section">
+    <h2>Guild Info</h2>
+    <div class="detail-grid">
+        <div class="detail-item">
+            <div class="dlabel">Faction</div>
+            <div class="dvalue"><span class="badge badge-{{ guild.faction_name.lower() if guild.faction_name else 'none' }}">{{ guild.faction_name or 'None' }}</span></div>
+        </div>
+        <div class="detail-item">
+            <div class="dlabel">Description</div>
+            <div class="dvalue">{{ guild.guild_description or 'No description' }}</div>
+        </div>
+        <div class="detail-item">
+            <div class="dlabel">Members</div>
+            <div class="dvalue">{{ members|length }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="detail-section">
+    <h2>Members ({{ members|length }})</h2>
+    <div class="card">
+        <div class="table-wrap">
+            <table id="members-table">
+                <thead>
+                    <tr>
+                        <th data-col="name">Name</th>
+                        <th data-col="account">Account</th>
+                        <th data-col="role">Role</th>
+                        <th data-col="status">Status</th>
+                        <th data-col="map">Map</th>
+                        <th data-col="vehicle">Vehicle</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in members %}
+                    <tr>
+                        <td><a href="/players/{{ m.actor_id }}">{{ m.player_name }}</a></td>
+                        <td>{{ m.account_email }}</td>
+                        <td><span class="badge badge-{{ fmt_role(m.role_id).lower() }}">{{ fmt_role(m.role_id) }}</span></td>
+                        <td>{% if m.online_status == 'Online' %}<span class="badge badge-online">Online</span>{% else %}<span class="badge badge-offline">Offline</span>{% endif %}</td>
+                        <td>{{ m.player_map or 'N/A' }}</td>
+                        <td>{% if m.is_driving %}<span class="badge badge-leader">{{ m.driving_vehicle_class | class_name }}</span>{% else %}N/A{% endif %}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="empty">No members found</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('#members-table thead th').forEach(th => {
+    th.addEventListener('click', () => {
+        const tbody = document.querySelector('#members-table tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const col = Array.from(th.parentNode.children).indexOf(th);
+        const isAsc = th.classList.contains('sort-asc');
+        document.querySelectorAll('#members-table thead th').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+        th.classList.add(isAsc ? 'sort-desc' : 'sort-asc');
+        rows.sort((a, b) => {
+            const va = a.children[col]?.textContent.trim() || '';
+            const vb = b.children[col]?.textContent.trim() || '';
+            return isAsc ? vb.localeCompare(va) : va.localeCompare(vb);
+        });
+        rows.forEach(r => tbody.appendChild(r));
+    });
+});
+</script>
+{% endblock %}

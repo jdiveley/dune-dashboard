@@ -1,0 +1,691 @@
+{% extends "base.html" %}
+{% block title %}Director - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Battlegroup Director</h1>
+    <p>Live server stats, scaling controls, and persistent settings</p>
+</div>
+
+<div id="loading-banner" class="loading-banner">Loading Director data...</div>
+<div id="error-banner" class="error-banner danger" style="display:none;"></div>
+
+<div id="director-content" style="display:none;">
+
+<div class="stats-grid" id="bg-stats">
+    <div class="stat-card">
+        <div class="label">Active Players</div>
+        <div class="value" id="stat-players">-</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Online</div>
+        <div class="value" id="stat-online" style="color:#4ade80;">-</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">In Transit</div>
+        <div class="value" id="stat-transit" style="color:#fbbf24;">-</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">In Queue</div>
+        <div class="value" id="stat-queue">-</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Login Requests</div>
+        <div class="value" id="stat-logins">-</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Travel Requests</div>
+        <div class="value" id="stat-travel">-</div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">World Status</div>
+    <div class="card-body">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" id="force-world-closed"> Force World Closed
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" id="force-world-closing"> Force World Closing Soon
+            </label>
+            <button id="btn-apply-world" class="btn-action" style="padding:6px 16px;background:#e67e22;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px;">Apply</button>
+            <button id="btn-clear-world" class="btn-action" style="padding:6px 16px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px;">Clear</button>
+        </div>
+        <div id="world-status-msg" style="margin-top:8px;font-size:12px;color:var(--text-muted);"></div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">Character Transfers</div>
+    <div class="card-body" id="char-transfer-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+                <label>Incoming Transfers:</label>
+                <select id="incoming-transfers" style="width:100%;padding:6px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:4px;margin-top:4px;">
+                    <option value="0">Default (0)</option>
+                    <option value="10">Deny All (10)</option>
+                    <option value="20">From Private Only (20)</option>
+                    <option value="30">From Official Only (30)</option>
+                    <option value="40">Accept All (40)</option>
+                </select>
+            </div>
+            <div>
+                <label style="display:flex;align-items:center;gap:6px;margin-top:20px;">
+                    <input type="checkbox" id="accept-outgoing"> Accept Outgoing Transfers
+                </label>
+            </div>
+            <div>
+                <label style="display:flex;align-items:center;gap:6px;">
+                    <input type="checkbox" id="free-transfer-from"> Free Transfer From
+                </label>
+            </div>
+            <div>
+                <label style="display:flex;align-items:center;gap:6px;">
+                    <input type="checkbox" id="free-transfer-to"> Free Transfer To
+                </label>
+            </div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+            <button id="btn-apply-transfer" class="btn-action" style="padding:6px 16px;background:#e67e22;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px;">Apply</button>
+            <button id="btn-clear-transfer" class="btn-action" style="padding:6px 16px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px;">Clear</button>
+        </div>
+        <div id="transfer-status-msg" style="margin-top:8px;font-size:12px;color:var(--text-muted);"></div>
+    </div>
+</div>
+
+<h2 style="margin:24px 0 12px;">Maps &amp; Servers</h2>
+<div id="maps-container"></div>
+
+</div>
+
+<style>
+.loading-banner { padding: 20px; text-align: center; color: var(--text-muted); font-size: 14px; }
+.mb-3 { margin-bottom: 16px; }
+.map-card { background: var(--card-bg); border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; }
+.map-header { padding: 10px 16px; background: var(--bg-hover); display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+.map-header:hover { background: var(--border); }
+.map-header h3 { margin: 0; font-size: 14px; }
+.map-header .meta { display: flex; gap: 10px; align-items: center; font-size: 12px; }
+.map-header .chevron { transition: transform 0.2s; font-size: 12px; }
+.map-header .chevron.open { transform: rotate(180deg); }
+.map-body { display: none; padding: 16px; }
+.map-body.open { display: block; }
+.server-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; align-items: center; }
+.server-row:last-child { border-bottom: none; }
+.server-row.header { font-weight: 600; color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
+.server-row.summary { padding: 4px 0; border-bottom: none; font-size: 11px; }
+.server-row.summary .partition-label { font-size: 11px; }
+.status-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-align: center; }
+.status-0 { background: #374151; color: #9ca3af; }
+.status-1 { background: #854d0e; color: #fbbf24; }
+.status-2 { background: #7c2d12; color: #fb923c; }
+.status-3 { background: #166534; color: #4ade80; }
+.status-starting { background: #1e3a5f; color: #60a5fa; }
+.config-row { display: flex; gap: 12px; padding: 12px 0 0; border-top: 1px solid var(--border); margin-top: 12px; flex-wrap: wrap; align-items: flex-end; }
+.config-field { display: flex; flex-direction: column; gap: 4px; }
+.config-field label { font-size: 11px; color: var(--text-muted); }
+.config-field input, .config-field select { padding: 4px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px; width: 90px; }
+.config-field input[type="checkbox"] { width: auto; margin-top: 4px; }
+.btn-apply-map { padding: 6px 16px; background: #27ae60; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.btn-apply-map:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-apply-map.applying { background: #854d0e; }
+.btn-apply-map.applied { background: #166534; }
+.btn-clear-map { padding: 6px 16px; background: #e74c3c; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.btn-clear-map:disabled { opacity: 0.5; cursor: not-allowed; }
+.partition-label { font-weight: 500; }
+.partition-label.igwo-green { color: #4ade80; }
+.partition-label.igwo-grey { color: #9ca3af; }
+.partition-label.igwo-brown { color: #fb923c; }
+.map-type-badge { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: var(--primary); color: #fff; text-transform: uppercase; }
+.summary-partitions { display: flex; gap: 6px; flex-wrap: wrap; max-width: 500px; }
+.summary-part { display: flex; gap: 4px; align-items: center; background: var(--bg); padding: 2px 8px; border-radius: 3px; font-size: 11px; }
+.summary-part .name { color: var(--text); font-weight: 500; }
+.summary-part .players { color: var(--text-muted); }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let bgData = null;
+let charTransferData = null;
+
+async function loadDirector() {
+    const banner = document.getElementById('loading-banner');
+    const error = document.getElementById('error-banner');
+    const content = document.getElementById('director-content');
+    try {
+        const [bgResp, ctResp] = await Promise.all([
+            fetch('/api/director/battlegroup'),
+            fetch('/api/director/character_transfer')
+        ]);
+        if (!bgResp.ok) throw new Error('Failed to load battlegroup data');
+        bgData = await bgResp.json();
+        if (ctResp.ok) {
+            charTransferData = await ctResp.json();
+        }
+        if (document.getElementById('maps-container').children.length === 0) {
+            renderStats();
+            renderMaps();
+            renderCharTransfer();
+            banner.style.display = 'none';
+            content.style.display = 'block';
+        } else {
+            updateStats();
+            updateMapCards();
+        }
+    } catch (e) {
+        banner.style.display = 'none';
+        error.textContent = 'Error loading Director: ' + e.message;
+        error.style.display = 'block';
+    }
+}
+
+function updateStats() {
+    const t = calcTotals();
+    document.getElementById('stat-players').textContent = t.total;
+    document.getElementById('stat-online').textContent = t.online;
+    document.getElementById('stat-transit').textContent = t.transit;
+    document.getElementById('stat-queue').textContent = t.queue;
+    document.getElementById('stat-logins').textContent = bgData.numLoginRequestsTotal || 0;
+    document.getElementById('stat-travel').textContent = bgData.numTravelRequestsTotal || 0;
+}
+
+function updateMapCards() {
+    const allMaps = [
+        ...Object.entries(bgData.dimensionMaps || {}).map(([n, d]) => [n, d, 'dimension']),
+        ...Object.entries(bgData.instancedMaps || {}).map(([n, d]) => [n, d, 'instanced']),
+        ...Object.entries(bgData.singleServerMaps || {}).map(([n, d]) => [n, d, 'single']),
+    ];
+
+    for (const [mapName, mapData, type] of allMaps) {
+        const card = document.querySelector(`.map-card[data-map="${mapName}"]`);
+        if (!card) continue;
+
+        let servers = [];
+        if (type === 'dimension') servers = objToArray(mapData.serversByDimension);
+        else if (type === 'instanced') servers = objToArray(mapData.instances);
+        else servers = [mapData];
+
+        const total = servers.reduce((s, sv) => s + (sv.numPlayersInGame || 0), 0);
+        const online = servers.reduce((s, sv) => s + (sv.numPlayersOnline || 0), 0);
+        const queue = servers.reduce((s, sv) => s + (sv.numPlayersInQueue || 0), 0);
+
+        const meta = card.querySelector('.map-header .meta');
+        if (meta) {
+            const playerSpan = meta.querySelector('.map-players');
+            const onlineSpan = meta.querySelector('.map-online');
+            const queueSpan = meta.querySelector('.map-queue');
+            if (playerSpan) playerSpan.textContent = `Players: ${total}`;
+            if (onlineSpan) onlineSpan.textContent = `Online: ${online}`;
+            if (queueSpan) queueSpan.textContent = queue ? `Queue: ${queue}` : '';
+        }
+
+        for (const s of servers) {
+            const label = s.partition?.label || s.label || '';
+            const row = card.querySelector(`.server-row[data-label="${label}"]`);
+            if (!row) continue;
+            const cells = row.querySelectorAll('span');
+            if (cells.length >= 6) {
+                cells[2].textContent = s.numPlayersInGame || 0;
+                cells[3].textContent = s.numPlayersOnline || 0;
+                cells[4].textContent = s.numPlayersInQueue ?? 'N/A';
+                const badge = cells[5];
+                badge.textContent = getStatusText(s);
+                badge.className = `status-badge ${getStatusClass(s)}`;
+            }
+        }
+
+        const summaryParts = card.querySelectorAll('.summary-part');
+        for (let i = 0; i < servers.length && i < summaryParts.length; i++) {
+            const s = servers[i];
+            const playersSpan = summaryParts[i].querySelector('.players');
+            if (playersSpan) playersSpan.textContent = s.numPlayersInGame || 0;
+            const nameSpan = summaryParts[i].querySelector('.name');
+            if (nameSpan) nameSpan.title = s.partition?.label || s.label || '';
+        }
+    }
+}
+
+function calcTotals() {
+    let total = 0, online = 0, transit = 0, queue = 0;
+    for (const maps of [bgData.dimensionMaps || {}, bgData.instancedMaps || {}, bgData.singleServerMaps || {}]) {
+        for (const [mapName, mapData] of Object.entries(maps)) {
+            if (mapData.serversByDimension) {
+                for (const s of objToArray(mapData.serversByDimension)) {
+                    total += s.numPlayersInGame || 0;
+                    online += s.numPlayersOnline || 0;
+                    transit += s.numPlayersInTransit || 0;
+                    queue += s.numPlayersInQueue || 0;
+                }
+            } else if (mapData.instances) {
+                for (const s of objToArray(mapData.instances)) {
+                    total += s.numPlayersInGame || 0;
+                    online += s.numPlayersOnline || 0;
+                    transit += s.numPlayersInTransit || 0;
+                    queue += s.numPlayersInQueue || 0;
+                }
+            } else {
+                total += mapData.numPlayersInGame || 0;
+                online += mapData.numPlayersOnline || 0;
+                transit += mapData.numPlayersInTransit || 0;
+                queue += mapData.numPlayersInQueue || 0;
+            }
+        }
+    }
+    return { total, online, transit, queue };
+}
+
+function renderStats() {
+    const t = calcTotals();
+    document.getElementById('stat-players').textContent = t.total;
+    document.getElementById('stat-online').textContent = t.online;
+    document.getElementById('stat-transit').textContent = t.transit;
+    document.getElementById('stat-queue').textContent = t.queue;
+    document.getElementById('stat-logins').textContent = bgData.numLoginRequestsTotal || 0;
+    document.getElementById('stat-travel').textContent = bgData.numTravelRequestsTotal || 0;
+}
+
+function renderCharTransfer() {
+    if (!charTransferData) return;
+    const cfg = charTransferData.config || {};
+    document.getElementById('force-world-closed').checked = cfg.forceIsWorldClosed || false;
+    document.getElementById('force-world-closing').checked = cfg.forceIsWorldClosingSoon || false;
+    document.getElementById('incoming-transfers').value = cfg.incomingCharacterTransfers || 0;
+    document.getElementById('accept-outgoing').checked = cfg.acceptOutgoingCharacterTransfers || false;
+    document.getElementById('free-transfer-from').checked = cfg.freeToTransferCharactersFrom || false;
+    document.getElementById('free-transfer-to').checked = cfg.freeToTransferCharactersTo || false;
+}
+
+function objToArray(obj) {
+    if (!obj) return [];
+    if (Array.isArray(obj)) return obj;
+    return Object.keys(obj).sort((a, b) => parseInt(a) - parseInt(b)).map(k => obj[k]);
+}
+
+function renderMaps() {
+    const container = document.getElementById('maps-container');
+    container.innerHTML = '';
+
+    const mapTypes = [
+        { key: 'dimensionMaps', label: 'dimension', maps: bgData.dimensionMaps || {} },
+        { key: 'instancedMaps', label: 'instanced', maps: bgData.instancedMaps || {} },
+        { key: 'singleServerMaps', label: 'single', maps: bgData.singleServerMaps || {} },
+    ];
+
+    for (const mt of mapTypes) {
+        for (const [mapName, mapData] of Object.entries(mt.maps)) {
+            const card = document.createElement('div');
+            card.className = 'map-card';
+            card.innerHTML = buildMapCard(mapName, mapData, mt.label);
+            container.appendChild(card);
+        }
+    }
+}
+
+function buildMapCard(mapName, mapData, type) {
+    const cfg = mapData.cfg || {};
+    let serversHtml = '';
+    let configHtml = '';
+    let summaryHtml = '';
+
+    if (type === 'dimension') {
+        const servers = objToArray(mapData.serversByDimension);
+        serversHtml = buildServerRows(servers);
+        configHtml = buildDimensionConfig(mapName, cfg);
+        summaryHtml = buildSummaryRow(servers);
+        mapData.numPlayersInGame = servers.reduce((sum, s) => sum + (s.numPlayersInGame || 0), 0);
+        mapData.numPlayersOnline = servers.reduce((sum, s) => sum + (s.numPlayersOnline || 0), 0);
+        mapData.numPlayersInQueue = servers.reduce((sum, s) => sum + (s.numPlayersInQueue || 0), 0);
+    } else if (type === 'instanced') {
+        const instances = objToArray(mapData.instances);
+        serversHtml = buildServerRows(instances);
+        configHtml = buildInstancedConfig(mapName, cfg);
+        summaryHtml = buildSummaryRow(instances);
+        mapData.numPlayersInGame = instances.reduce((sum, s) => sum + (s.numPlayersInGame || 0), 0);
+        mapData.numPlayersOnline = instances.reduce((sum, s) => sum + (s.numPlayersOnline || 0), 0);
+        mapData.numPlayersInQueue = instances.reduce((sum, s) => sum + (s.numPlayersInQueue || 0), 0);
+    } else {
+        serversHtml = buildServerRows([mapData]);
+        configHtml = buildSingleConfig(mapName, cfg);
+        summaryHtml = buildSummaryRow([mapData]);
+    }
+
+    const t = calcTotals();
+
+    return `
+        <div class="map-card" data-map="${mapName}">
+            <div class="map-header" onclick="toggleMap(this)">
+            <div style="flex:1;">
+                <h3>${mapName}</h3>
+                ${summaryHtml}
+            </div>
+            <div class="meta">
+                <span class="map-type-badge">${type}</span>
+                <span class="map-players">Players: ${t.total}</span>
+                <span class="map-online" style="color:#4ade80;">Online: ${t.online}</span>
+                <span class="map-queue" ${t.queue ? '' : 'style="display:none"'}>${t.queue ? `Queue: ${t.queue}` : ''}</span>
+                <span class="chevron">&#9660;</span>
+            </div>
+        </div>
+        <div class="map-body">
+            <div class="server-row header">
+                <span>Partition</span><span>Server ID</span><span>Players</span><span>Online</span><span>Queue</span><span>Status</span>
+            </div>
+            ${serversHtml}
+            ${configHtml}
+        </div>
+    `;
+}
+
+function buildSummaryRow(servers) {
+    if (!servers || servers.length === 0) return '';
+    const parts = servers.map(s => {
+        const label = s.partition?.label || s.label || '';
+        const players = s.numPlayersInGame || 0;
+        return `<span class="summary-part" data-label="${label}">
+            <span class="name" title="${label}">${label.length > 18 ? label.substring(0,18)+'...' : label}</span>
+            <span class="players">${players}</span>
+        </span>`;
+    }).join('');
+    return `<div class="summary-partitions">${parts}</div>`;
+}
+
+function toggleMap(header) {
+    const body = header.nextElementSibling;
+    const chevron = header.querySelector('.chevron');
+    body.classList.toggle('open');
+    chevron.classList.toggle('open');
+}
+
+function getStatusText(s) {
+    const ready = s.lastServerState?.ready;
+    const starting = s.lastServerState?.isStartingMap;
+    if (s.status === 0) return 'Not Available';
+    if (s.status === 1) return 'Allocating';
+    if (s.status === 2) return starting ? 'Starting' : 'Not Ready';
+    if (s.status === 3) return ready === false ? 'Running (Not Ready)' : 'Running';
+    return 'Unknown';
+}
+
+function getStatusClass(s) {
+    if (s.status === 0) return 'status-0';
+    if (s.status === 1) return 'status-1';
+    if (s.status === 2) {
+        const starting = s.lastServerState?.isStartingMap;
+        return starting ? 'status-starting' : 'status-2';
+    }
+    if (s.status === 3) {
+        const ready = s.lastServerState?.ready;
+        return ready === false ? 'status-2' : 'status-3';
+    }
+    return 'status-0';
+}
+
+function buildServerRows(servers) {
+    if (!servers || servers.length === 0) return '';
+    return servers.map(s => {
+        const statusText = getStatusText(s);
+        const statusClass = getStatusClass(s);
+        const label = s.partition?.label || s.label || '';
+        const igwoClass = s.isGreyInIGWO ? 'igwo-grey' : s.isBrownInIGWO ? 'igwo-brown' : 'igwo-green';
+        return `
+            <div class="server-row" data-label="${label}">
+                <span class="partition-label ${igwoClass}">${label}</span>
+                <span style="font-family:monospace;font-size:11px;">${s.partition?.serverId || '-'}</span>
+                <span>${s.numPlayersInGame || 0}</span>
+                <span>${s.numPlayersOnline || 0}</span>
+                <span>${s.numPlayersInQueue ?? 'N/A'}</span>
+                <span class="status-badge ${statusClass}">${statusText}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+function buildDimensionConfig(mapName, cfg) {
+    const minSrv = cfg.minServers ?? 0;
+    const extraSrv = cfg.numExtraServers ?? 0;
+    const autoScale = cfg.enableAutomaticInstanceScaling ?? false;
+    const throttle = cfg.instanceScalingThrottlingSeconds ?? 30;
+    const phCap = cfg.playerHardCap ?? '';
+    return `
+        <div class="config-row">
+            <div class="config-field">
+                <label>Player Hard Cap</label>
+                <input type="number" id="cfg-${mapName}-phcap" value="${phCap}" min="1" max="10000">
+            </div>
+            <div class="config-field">
+                <label>Min Servers</label>
+                <input type="number" id="cfg-${mapName}-minsrv" value="${minSrv}" min="0" max="100">
+            </div>
+            <div class="config-field">
+                <label>Extra Servers</label>
+                <input type="number" id="cfg-${mapName}-extrasrv" value="${extraSrv}" min="0" max="100">
+            </div>
+            <div class="config-field">
+                <label>Auto Scale</label>
+                <input type="checkbox" id="cfg-${mapName}-autoscale" ${autoScale ? 'checked' : ''}>
+            </div>
+            <div class="config-field">
+                <label>Scale Throttle (s)</label>
+                <input type="number" id="cfg-${mapName}-throttle" value="${throttle}" min="1">
+            </div>
+            <button class="btn-apply-map" onclick="applyConfig('${mapName}','dimension', this)">Apply</button>
+            <button class="btn-clear-map" onclick="clearConfig('${mapName}', this)">Clear</button>
+        </div>
+    `;
+}
+
+function buildInstancedConfig(mapName, cfg) {
+    const minSrv = cfg.minServers ?? 0;
+    const extraSrv = cfg.numExtraServers ?? 0;
+    const autoScale = cfg.enableAutomaticInstanceScaling ?? false;
+    const throttle = cfg.instanceScalingThrottlingSeconds ?? 30;
+    const phCap = cfg.playerHardCap ?? '';
+    return `
+        <div class="config-row">
+            <div class="config-field">
+                <label>Player Hard Cap</label>
+                <input type="number" id="cfg-${mapName}-phcap" value="${phCap}" min="1" max="10000">
+            </div>
+            <div class="config-field">
+                <label>Min Servers</label>
+                <input type="number" id="cfg-${mapName}-minsrv" value="${minSrv}" min="0" max="100">
+            </div>
+            <div class="config-field">
+                <label>Extra Servers</label>
+                <input type="number" id="cfg-${mapName}-extrasrv" value="${extraSrv}" min="0" max="100">
+            </div>
+            <div class="config-field">
+                <label>Auto Scale</label>
+                <input type="checkbox" id="cfg-${mapName}-autoscale" ${autoScale ? 'checked' : ''}>
+            </div>
+            <div class="config-field">
+                <label>Scale Throttle (s)</label>
+                <input type="number" id="cfg-${mapName}-throttle" value="${throttle}" min="1">
+            </div>
+            <button class="btn-apply-map" onclick="applyConfig('${mapName}','instanced', this)">Apply</button>
+            <button class="btn-clear-map" onclick="clearConfig('${mapName}', this)">Clear</button>
+        </div>
+    `;
+}
+
+function buildSingleConfig(mapName, cfg) {
+    const phCap = cfg.playerHardCap ?? '';
+    return `
+        <div class="config-row">
+            <div class="config-field">
+                <label>Player Hard Cap</label>
+                <input type="number" id="cfg-${mapName}-phcap" value="${phCap}" min="1" max="10000">
+            </div>
+            <button class="btn-apply-map" onclick="applyConfig('${mapName}','single', this)">Apply</button>
+            <button class="btn-clear-map" onclick="clearConfig('${mapName}', this)">Clear</button>
+        </div>
+    `;
+}
+
+async function applyConfig(mapName, type, btn) {
+    btn.disabled = true;
+    btn.classList.add('applying');
+    btn.textContent = 'Applying...';
+
+    const config = { MapName: mapName };
+
+    if (type === 'dimension') {
+        const phcapVal = document.getElementById(`cfg-${mapName}-phcap`).value;
+        const minsrvVal = document.getElementById(`cfg-${mapName}-minsrv`).value;
+        const extrasrvVal = document.getElementById(`cfg-${mapName}-extrasrv`).value;
+        const throttleVal = document.getElementById(`cfg-${mapName}-throttle`).value;
+        config.DimensionServerGroupConfig = {
+            EnforceSameHomeDimensionForAll: false,
+            PlayerHardCap: phcapVal ? parseInt(phcapVal) : null,
+            ShouldUpdatePlayerCountOnFls: false,
+            MinServers: minsrvVal ? parseInt(minsrvVal) : 0,
+            NumExtraServers: extrasrvVal ? parseInt(extrasrvVal) : 0,
+            EnableAutomaticInstanceScaling: document.getElementById(`cfg-${mapName}-autoscale`).checked,
+            InstanceScalingThrottlingSeconds: throttleVal ? parseInt(throttleVal) : 30,
+            DimensionOverrides: {}
+        };
+    } else if (type === 'instanced') {
+        const phcapVal = document.getElementById(`cfg-${mapName}-phcap`).value;
+        const minsrvVal = document.getElementById(`cfg-${mapName}-minsrv`).value;
+        const extrasrvVal = document.getElementById(`cfg-${mapName}-extrasrv`).value;
+        const throttleVal = document.getElementById(`cfg-${mapName}-throttle`).value;
+        config.ClassicalInstancingGroupConfig = {
+            PlayerHardCap: phcapVal ? parseInt(phcapVal) : null,
+            ShouldUpdatePlayerCountOnFls: false,
+            MinServers: minsrvVal ? parseInt(minsrvVal) : 0,
+            NumExtraServers: extrasrvVal ? parseInt(extrasrvVal) : 0,
+            EnableAutomaticInstanceScaling: document.getElementById(`cfg-${mapName}-autoscale`).checked,
+            InstanceScalingThrottlingSeconds: throttleVal ? parseInt(throttleVal) : 30
+        };
+    } else {
+        const phcapVal = document.getElementById(`cfg-${mapName}-phcap`).value;
+        config.SingleServerConfig = {
+            PlayerHardCap: phcapVal ? parseInt(phcapVal) : null,
+            ShouldUpdatePlayerCountOnFls: false
+        };
+    }
+
+    try {
+        const resp = await fetch('/api/director/update_config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        btn.classList.remove('applying');
+        btn.classList.add('applied');
+        btn.textContent = 'Applied!';
+        setTimeout(() => {
+            btn.classList.remove('applied');
+            btn.textContent = 'Apply';
+            btn.disabled = false;
+        }, 2000);
+    } catch (e) {
+        btn.classList.remove('applying');
+        btn.textContent = 'Failed';
+        setTimeout(() => { btn.textContent = 'Apply'; btn.disabled = false; }, 2000);
+    }
+}
+
+async function clearConfig(mapName, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Clearing...';
+    try {
+        const resp = await fetch('/api/director/clear_config', {
+            method: 'POST',
+            body: mapName
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        btn.textContent = 'Cleared!';
+        setTimeout(() => { loadDirector(); }, 1500);
+    } catch (e) {
+        btn.textContent = 'Failed';
+        setTimeout(() => { btn.textContent = 'Clear'; btn.disabled = false; }, 2000);
+    }
+}
+
+document.getElementById('btn-apply-world')?.addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = 'Applying...';
+    const config = {
+        ForceIsWorldClosed: document.getElementById('force-world-closed').checked,
+        ForceIsWorldClosingSoon: document.getElementById('force-world-closing').checked
+    };
+    try {
+        const resp = await fetch('/api/director/character_transfer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        document.getElementById('world-status-msg').textContent = 'World status applied and persisted.';
+        this.textContent = 'Applied!';
+        setTimeout(() => { this.textContent = 'Apply'; this.disabled = false; }, 2000);
+    } catch (e) {
+        document.getElementById('world-status-msg').textContent = 'Error: ' + e.message;
+        this.textContent = 'Apply'; this.disabled = false;
+    }
+});
+
+document.getElementById('btn-clear-world')?.addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = 'Clearing...';
+    try {
+        const resp = await fetch('/api/director/character_transfer_clear', { method: 'POST' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        document.getElementById('world-status-msg').textContent = 'World status overrides cleared.';
+        this.textContent = 'Cleared!';
+        setTimeout(() => { loadDirector(); }, 1500);
+    } catch (e) {
+        document.getElementById('world-status-msg').textContent = 'Error: ' + e.message;
+        this.textContent = 'Clear'; this.disabled = false;
+    }
+});
+
+document.getElementById('btn-apply-transfer')?.addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = 'Applying...';
+    const config = {
+        IncomingCharacterTransfers: parseInt(document.getElementById('incoming-transfers').value),
+        AcceptOutgoingCharacterTransfers: document.getElementById('accept-outgoing').checked,
+        FreeToTransferCharactersFrom: document.getElementById('free-transfer-from').checked,
+        FreeToTransferCharactersTo: document.getElementById('free-transfer-to').checked
+    };
+    try {
+        const resp = await fetch('/api/director/character_transfer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        document.getElementById('transfer-status-msg').textContent = 'Transfer settings applied and persisted.';
+        this.textContent = 'Applied!';
+        setTimeout(() => { this.textContent = 'Apply'; this.disabled = false; }, 2000);
+    } catch (e) {
+        document.getElementById('transfer-status-msg').textContent = 'Error: ' + e.message;
+        this.textContent = 'Apply'; this.disabled = false;
+    }
+});
+
+document.getElementById('btn-clear-transfer')?.addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = 'Clearing...';
+    try {
+        const resp = await fetch('/api/director/character_transfer_clear', { method: 'POST' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        document.getElementById('transfer-status-msg').textContent = 'Transfer settings cleared.';
+        this.textContent = 'Cleared!';
+        setTimeout(() => { loadDirector(); }, 1500);
+    } catch (e) {
+        document.getElementById('transfer-status-msg').textContent = 'Error: ' + e.message;
+        this.textContent = 'Clear'; this.disabled = false;
+    }
+});
+
+loadDirector();
+setInterval(loadDirector, 5000);
+</script>
+{% endblock %}

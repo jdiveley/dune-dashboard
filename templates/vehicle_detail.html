@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Vehicle {{ vehicle.id }} - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Vehicle #{{ vehicle.id }}</h1>
+    <p><a href="/vehicles">&larr; Back to Vehicles</a></p>
+</div>
+
+<div class="card" style="margin-bottom:16px;">
+    <div class="card-body" style="padding:12px 16px;background:var(--bg-hover);border-left:3px solid var(--accent);">
+        <strong>Note:</strong> Health percentages are calculated against the durability cap, not the module's base max health. Correct base values are still being determined, so these numbers may not reflect actual vehicle state. Fuel data is also pending implementation.
+    </div>
+</div>
+
+{% if tunnel_down %}
+<div class="error-banner danger"><strong>SSH Tunnel Not Detected</strong></div>
+{% elif not_found %}
+<div class="error-banner"><strong>Vehicle not found</strong></div>
+{% elif db_error %}
+<div class="error-banner danger"><strong>Database Error:</strong> {{ db_error }}</div>
+{% else %}
+
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:24px;">
+    <div class="stat-card">
+        <div class="label">Type</div>
+        <div class="value" style="font-size:14px;">{{ vehicle.class | class_name }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Owner</div>
+        <div class="value">{% if vehicle.owner_name %}<a href="/players/{{ vehicle.owner_pawn_id }}">{{ vehicle.owner_name }}</a>{% else %}Unknown{% endif %}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Map</div>
+        <div class="value">{{ vehicle.map or 'N/A' }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Modules</div>
+        <div class="value">{{ modules|length }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Fuel</div>
+        <div class="value" style="font-size:12px;color:var(--text-muted);">TBD</div>
+    </div>
+</div>
+
+<h2>Modules / Parts</h2>
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Module</th>
+                <th>Current</th>
+                <th>DB Max</th>
+                <th>%</th>
+                <th>Damage Cause</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for m in modules %}
+            <tr>
+                <td>{{ m.id }}</td>
+                <td>{{ m.name }}</td>
+                <td>{{ m.current }}</td>
+                <td>{{ m.max }}</td>
+                <td>{% set pct = (m.current / m.max * 100) if m.max > 0 else 0 %}{% if pct > 66 %}<span style="color:green">{{ "%.0f"|format(pct) }}%</span>{% elif pct > 33 %}<span style="color:orange">{{ "%.0f"|format(pct) }}%</span>{% else %}<span style="color:red">{{ "%.0f"|format(pct) }}%</span>{% endif %}</td>
+                <td style="font-size:11px;">{{ m.damage_cause or '-' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="empty">No modules found</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endif %}
+{% endblock %}

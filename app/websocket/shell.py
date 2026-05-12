@@ -1,0 +1,124 @@
+"""WebSocket shell handler - interactive terminal via SSH"""
+
+import os
+import sys
+import time
+import threading
+import logging
+
+try:
+    import paramiko
+    HAS_PARAMIKO = True
+except ImportError:
+    HAS_PARAMIKO = False
+
+logger = logging.getLogger(__name__)
+
+shell_processes = {}
+
+
+def register_websocket_handlers(socketio, settings):
+    if not HAS_PARAMIKO:
+        logger.warning("Paramiko not installed. WebSocket shell disabled.")
+        return
+
+    @socketio.on('shell_create')
+    def handle_shell_create(data):
+        shell_type = data.get('type', 'vm')
+        shell_id = request.sid
+
+        try:
+            ssh_key = _find_ssh_key(settings)
+            if not ssh_key:
+                return emit('shell_created', {'success': False, 'error': 'SSH key not found'})
+
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.WarningPolicy())
+
+            server_host = settings['server']['host']
+            server_user = settings['server']['user']
+
+            if shell_type == 'vm':
+                client.connect(server_host, username=server_user, key_filename=ssh_key, timeout=10)
+                chan = client.invoke_shell(term='xterm-256color', width=80, height=24)
+            else:
+                namespace = settings['kubernetes']['namespace']
+                pod = data.get('pod', '')
+                client.connect(server_host, username=server_user, key_filename=ssh_key, timeout=10)
+                transport = client.get_transport()
+                chan = transport.open_session()
+                chan.get_pty(term='xterm-256color', width=80, height=24)
+                chan.exec_command(f'sudo kubectl exec -it {pod} -n {namespace} -- /bin/bash')
+
+            shell_processes[shell_id] = {'client': client, 'channel': chan, 'type': shell_type}
+
+            def read_channel():
+                time.sleep(0.5)
+                socketio.emit('shell_output', {'data': '\r\nConnected. Press Enter...\r\n', 'type': 'stdout', 'target': shell_type}, room=shell_id)
+                while shell_id in shell_processes:
+                    try:
+                        while chan.recv_ready():
+                            data = chan.recv(65535).decode('utf-8', errors='replace')
+                            if data:
+                                socketio.emit('shell_output', {'data': data, 'type': 'stdout', 'target': shell_type}, room=shell_id)
+                        while chan.recv_stderr_ready():
+                            data = chan.recv_stderr(65535).decode('utf-8', errors='replace')
+                            if data:
+                                socketio.emit('shell_output', {'data': data, 'type': 'stderr', 'target': shell_type}, room=shell_id)
+                        if chan.closed:
+                            socketio.emit('shell_output', {'data': '\r\n[Disconnected]\r\n', 'type': 'stdout', 'target': shell_type}, room=shell_id)
+                            break
+                    except Exception:
+                        break
+                    time.sleep(0.1)
+
+            threading.Thread(target=read_channel, daemon=True).start()
+            socketio.emit('shell_created', {'success': True, 'shell_id': shell_id}, room=shell_id)
+        except Exception as e:
+            socketio.emit('shell_created', {'success': False, 'error': str(e)}, room=shell_id)
+
+    @socketio.on('shell_input')
+    def handle_shell_input(data):
+        shell_id = request.sid
+        if shell_id in shell_processes:
+            try:
+                chan = shell_processes[shell_id]['channel']
+                if chan and chan.send_ready():
+                    chan.send(data.get('data', ''))
+            except Exception:
+                pass
+
+    @socketio.on('shell_disconnect')
+    def handle_shell_disconnect():
+        shell_id = request.sid
+        if shell_id in shell_processes:
+            try:
+                if 'client' in shell_processes[shell_id]:
+                    shell_processes[shell_id]['client'].close()
+            except Exception:
+                pass
+            del shell_processes[shell_id]
+
+
+def _find_ssh_key(settings):
+    key = settings['server'].get('ssh_key')
+    if key and os.path.exists(key):
+        return key
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    temp_dir = os.environ.get('TEMP') or os.environ.get('TMPDIR') or ('/tmp' if os.name != 'nt' else 'C:\\Temp')
+    potential_paths = [
+        os.path.join(temp_dir, 'dune-tunnel-key'),
+        os.path.join(temp_dir, 'dune-awakening-server-sshKey'),
+        os.path.join(base_dir, 'internal-scripts', 'ssh', 'sshKey'),
+        os.path.join(os.path.dirname(base_dir), 'internal-scripts', 'ssh', 'sshKey'),
+    ]
+    for p in potential_paths:
+        if os.path.exists(p):
+            return p
+    return None
+
+
+# Import flask globals inside functions to avoid circular imports
+from flask import request
+from flask_socketio import emit

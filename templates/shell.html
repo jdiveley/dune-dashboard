@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Shell - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Shell Access</h1>
+    <p>Live terminal sessions - VM and Pod shells</p>
+</div>
+
+{% if tunnel_down %}
+<div class="error-banner danger"><strong>SSH Tunnel Not Detected</strong></div>
+{% else %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+    <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>VM Shell</span>
+            <button id="btn-shell-vm" onclick="toggleShell('vm')" style="padding:4px 12px;background:var(--primary);color:#fff;border:none;border-radius:4px;cursor:pointer;">Connect</button>
+        </div>
+        <div id="terminal-vm" style="height:300px;background:#1a1a1a;padding:10px;font-family:monospace;font-size:12px;overflow:auto;"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Pod Shell</span>
+            <select id="pod-select" style="padding:4px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;">
+                {% for pod in pods %}
+                <option value="{{ pod.name }}">{{ pod.name }}</option>
+                {% endfor %}
+            </select>
+            <button id="btn-shell-pod" onclick="toggleShell('pod')" style="padding:4px 12px;background:var(--primary);color:#fff;border:none;border-radius:4px;cursor:pointer;">Connect</button>
+        </div>
+        <div id="terminal-pod" style="height:300px;background:#1a1a1a;padding:10px;font-family:monospace;font-size:12px;overflow:auto;"></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Pods ({{ pods|length }})</div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Name</th><th>Role</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                {% for pod in pods %}
+                <tr>
+                    <td style="font-family:monospace;font-size:12px;">{{ pod.name }}</td>
+                    <td><span class="badge badge-{{ pod.role.lower() if pod.role else 'default' }}">{{ pod.role or 'default' }}</span></td>
+                    <td><span class="badge badge-{{ pod.status.lower() }}">{{ pod.status }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" class="empty">No pods found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+<script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.min.js"></script>
+<script>
+const socket = io();
+
+let termVM = null;
+let termPod = null;
+let connectedVM = false;
+let connectedPod = false;
+let shellIdVM = null;
+let shellIdPod = null;
+
+function createTerminal(elementId) {
+    const term = new Terminal({
+        cursorBlink: true,
+        fontSize: 14,
+        fontFamily: 'Consolas, "Courier New", monospace',
+        theme: {
+            background: '#1a1a1a',
+            foreground: '#cccccc'
+        },
+        rows: 20,
+        cols: 80
+    });
+    term.open(document.getElementById(elementId));
+    return term;
+}
+
+function toggleShell(type) {
+    if ((type === 'vm' && connectedVM) || (type === 'pod' && connectedPod)) {
+        disconnectShell(type);
+    } else {
+        startShell(type);
+    }
+}
+
+function startShell(type) {
+    const btnId = type === 'vm' ? 'btn-shell-vm' : 'btn-shell-pod';
+    const termId = type === 'vm' ? 'terminal-vm' : 'terminal-pod';
+    
+    document.getElementById(btnId).disabled = true;
+    document.getElementById(btnId).textContent = 'Connecting...';
+    
+    const data = { type: type };
+    if (type === 'pod') {
+        data.pod = document.getElementById('pod-select').value;
+    }
+    
+    socket.emit('shell_create', data);
+    
+    socket.once('shell_created', function(response) {
+        if (response.success) {
+            const shellId = response.shell_id;
+            if (type === 'vm') {
+                shellIdVM = shellId;
+                termVM = createTerminal(termId);
+                setupTerminalInput(termVM, 'vm');
+                connectedVM = true;
+            } else {
+                shellIdPod = shellId;
+                termPod = createTerminal(termId);
+                setupTerminalInput(termPod, 'pod');
+                connectedPod = true;
+            }
+            document.getElementById(btnId).textContent = 'Disconnect';
+            document.getElementById(btnId).style.background = '#dc3545';
+            document.getElementById(btnId).disabled = false;
+        } else {
+            document.getElementById(btnId).textContent = 'Failed';
+            document.getElementById(btnId).disabled = false;
+            alert('Connection failed: ' + response.error);
+        }
+    });
+}
+
+function disconnectShell(type) {
+    const btnId = type === 'vm' ? 'btn-shell-vm' : 'btn-shell-pod';
+    const termId = type === 'vm' ? 'terminal-vm' : 'terminal-pod';
+    const shellId = type === 'vm' ? shellIdVM : shellIdPod;
+    
+    socket.emit('shell_disconnect', { shell_id: shellId, type: type });
+    
+    if (type === 'vm') {
+        if (termVM) { termVM.dispose(); termVM = null; }
+        connectedVM = false;
+        shellIdVM = null;
+    } else {
+        if (termPod) { termPod.dispose(); termPod = null; }
+        connectedPod = false;
+        shellIdPod = null;
+    }
+    
+    document.getElementById(btnId).textContent = 'Connect';
+    document.getElementById(btnId).style.background = 'var(--primary)';
+    document.getElementById(termId).innerHTML = '';
+}
+
+socket.on('shell_output', function(data) {
+    if (data.type === 'stdout') {
+        if (data.target === 'vm' && termVM) {
+            termVM.write(data.data);
+        }
+        if (data.target === 'pod' && termPod) {
+            termPod.write(data.data);
+        }
+    }
+});
+
+socket.on('connect', function() {
+    console.log('Socket connected');
+});
+
+function setupTerminalInput(term, type) {
+    term.onData(function(data) {
+        socket.emit('shell_input', {data: data, type: type});
+    });
+}
+</script>
+<style>
+.xterm { height: 100%; }
+.xterm-viewport { overflow-y: auto !important; }
+</style>
+{% endblock %}

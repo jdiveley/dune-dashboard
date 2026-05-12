@@ -1,0 +1,54 @@
+# Dune Awakening Dashboard - Settings
+# ==========================================
+# All configuration in one file.
+# Copy this to settings.yaml and edit for your server.
+# Run 'python setup.py' for guided setup.
+# ==========================================
+
+# Server connection
+server:
+  host: "65.21.198.100"       # VM IP address
+  user: "dune"                 # SSH username
+  ssh_key: null                # Path to SSH key (null = auto-detect)
+
+# Dashboard
+dashboard:
+  host: "127.0.0.1"            # Bind address (use 127.0.0.1 for security)
+  port: 5050                   # Port number
+  debug: false                 # Set true for development only
+  secret_key: "change-me-to-random-string"  # For session security
+
+# Database (accessed via SSH tunnel)
+database:
+  host: "127.0.0.1"            # Local tunnel endpoint
+  port: 15433                  # Local tunnel port
+  user: "postgres"
+  password: "postgres"
+  name: "dune"
+  schema: "dune"
+  min_connections: 2
+  max_connections: 10
+
+# Kubernetes
+kubernetes:
+  namespace: ""                # Leave empty to auto-detect on first run
+  battlegroup_script: "/home/dune/.dune/bin/battlegroup"
+
+# Cache (seconds)
+cache:
+  chat_pod_ttl: 60
+  chat_messages_ttl: 10
+  static_data_ttl: 300
+
+# Authentication
+auth:
+  enabled: true                # Set false to disable login (localhost only)
+  username: "admin"
+  password: "changeme"         # Change this!
+
+# Logging
+logging:
+  level: "INFO"                # DEBUG, INFO, WARNING, ERROR
+  file: "logs/dashboard.log"
+  max_bytes: 10485760          # 10MB
+  backup_count: 5

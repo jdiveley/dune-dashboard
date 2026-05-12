@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Files - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>File Browser</h1>
+    <p>Browse server files via SSH</p>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="fb-toolbar">
+            <div class="fb-breadcrumb" id="fb-breadcrumb"></div>
+            <div class="fb-actions">
+                <button id="fb-refresh-btn" class="fb-btn">Refresh</button>
+            </div>
+        </div>
+        <div id="fb-error" class="error-banner danger" style="display:none;"></div>
+        <div id="fb-file-list" class="fb-file-list"></div>
+    </div>
+</div>
+
+<style>
+.fb-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--bg-hover); border-radius: 6px; margin-bottom: 12px; }
+.fb-breadcrumb { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.fb-breadcrumb span { cursor: pointer; color: var(--primary); font-family: monospace; font-size: 13px; }
+.fb-breadcrumb span:hover { text-decoration: underline; }
+.fb-breadcrumb .sep { color: var(--text-muted); cursor: default; font-size: 11px; }
+.fb-breadcrumb .sep:hover { text-decoration: none; }
+.fb-breadcrumb .current { color: var(--text); cursor: default; }
+.fb-breadcrumb .current:hover { text-decoration: none; }
+.fb-actions { display: flex; gap: 8px; }
+.fb-btn { padding: 6px 14px; background: var(--bg-card); color: var(--text); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 13px; }
+.fb-btn:hover { background: var(--bg-hover); }
+.fb-file-list { }
+.fb-item { display: flex; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.fb-item:hover { background: var(--bg-hover); }
+.fb-item:last-child { border-bottom: none; }
+.fb-icon { width: 24px; text-align: center; margin-right: 8px; font-size: 16px; }
+.fb-icon.dir { color: var(--accent); }
+.fb-name { flex: 1; font-size: 13px; }
+.fb-name.dir { color: var(--accent); font-weight: 500; cursor: pointer; }
+.fb-name.file { cursor: pointer; }
+.fb-name:hover { text-decoration: underline; }
+.fb-size { color: var(--text-muted); font-size: 12px; margin-right: 12px; min-width: 70px; text-align: right; }
+.fb-date { color: var(--text-muted); font-size: 12px; margin-right: 12px; min-width: 130px; }
+.fb-perms { color: var(--text-muted); font-size: 11px; font-family: monospace; margin-right: 12px; min-width: 80px; }
+.fb-empty { padding: 20px; text-align: center; color: var(--text-muted); }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentPath = '/srv';
+
+function formatSize(sizeStr) {
+    if (!sizeStr || sizeStr === '-') return '';
+    const bytes = parseInt(sizeStr);
+    if (isNaN(bytes)) return sizeStr;
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0;
+    let size = bytes;
+    while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
+    return size.toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
+}
+
+function renderBreadcrumb(path) {
+    const parts = path.split('/').filter(Boolean);
+    let html = '<span onclick="loadFiles(\'/\')">&#128193; /</span>';
+    let buildPath = '';
+    for (let i = 0; i < parts.length; i++) {
+        buildPath += '/' + parts[i];
+        const isLast = i === parts.length - 1;
+        if (isLast) {
+            html += `<span class="sep">/</span><span class="current">${parts[i]}</span>`;
+        } else {
+            html += `<span class="sep">/</span><span onclick="loadFiles('${buildPath.replace(/'/g, "\\'")}')">${parts[i]}</span>`;
+        }
+    }
+    return html;
+}
+
+async function loadFiles(path) {
+    currentPath = path;
+    const list = document.getElementById('fb-file-list');
+    const error = document.getElementById('fb-error');
+    const breadcrumb = document.getElementById('fb-breadcrumb');
+    error.style.display = 'none';
+    list.innerHTML = '<div class="fb-empty">Loading...</div>';
+    breadcrumb.innerHTML = renderBreadcrumb(path);
+
+    try {
+        const form = new FormData();
+        form.append('path', path);
+        const resp = await fetch('/api/files/list', { method: 'POST', body: form });
+        const data = await resp.json();
+        if (!data.success) {
+            list.innerHTML = '';
+            error.textContent = 'Error: ' + (data.error || 'Failed to list directory');
+            error.style.display = 'block';
+            return;
+        }
+        const files = data.files || [];
+        if (files.length === 0) {
+            list.innerHTML = '<div class="fb-empty">Empty directory</div>';
+            return;
+        }
+        const sorted = files.sort((a, b) => {
+            if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+            return a.name.localeCompare(b.name);
+        });
+        let html = '';
+        for (const f of sorted) {
+            const icon = f.is_dir ? '&#128193;' : getFileIcon(f.name);
+            const iconClass = f.is_dir ? 'dir' : '';
+            const nameClass = f.is_dir ? 'dir' : 'file';
+            const fullPath = (path === '/' ? '' : path) + '/' + f.name;
+            const safePath = fullPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            const safeName = f.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            const clickAction = f.is_dir
+                ? `loadFiles('${safePath}')`
+                : `viewFile('${safePath}', '${safeName}')`;
+            html += `<div class="fb-item" onclick="${clickAction}">
+                <span class="fb-icon ${iconClass}">${icon}</span>
+                <span class="fb-name ${nameClass}">${f.name}</span>
+                <span class="fb-perms">${f.perms || ''}</span>
+                <span class="fb-size">${formatSize(f.size)}</span>
+                <span class="fb-date">${f.date || ''}</span>
+            </div>`;
+        }
+        list.innerHTML = html;
+    } catch (e) {
+        list.innerHTML = '';
+        error.textContent = 'Request failed: ' + e.message;
+        error.style.display = 'block';
+    }
+}
+
+function getFileIcon(name) {
+    const ext = name.split('.').pop().toLowerCase();
+    const icons = {
+        log: '&#128221;', txt: '&#128196;', ini: '&#9881;', cfg: '&#9881;',
+        json: '&#123364;', xml: '&#128196;', yaml: '&#128196;', yml: '&#128196;',
+        sh: '&#9881;', ps1: '&#9881;', bat: '&#9881;', cmd: '&#9881;',
+        zip: '&#128230;', gz: '&#128230;', tar: '&#128230;',
+        sql: '&#128451;', db: '&#128451;', sqlite: '&#128451;',
+        png: '&#127748;', jpg: '&#127748;', jpeg: '&#127748;', gif: '&#127748;', svg: '&#127748;',
+        pdf: '&#128214;',
+        md: '&#128214;', html: '&#127760;', css: '&#127912;', js: '&#128220;',
+        py: '&#128220;',
+    };
+    return icons[ext] || '&#128196;';
+}
+
+function viewFile(path, name) {
+    const ext = name.split('.').pop().toLowerCase();
+    const textExts = ['log', 'txt', 'ini', 'cfg', 'json', 'xml', 'yaml', 'yml', 'sh', 'ps1', 'bat', 'cmd', 'md', 'html', 'css', 'js', 'py', 'conf', 'env'];
+    if (textExts.includes(ext)) {
+        window.open(`/files/view?path=${encodeURIComponent(path)}`, '_blank');
+    } else {
+        alert('File preview is only available for text files. Download via SSH to view this file.');
+    }
+}
+
+document.getElementById('fb-refresh-btn')?.addEventListener('click', () => loadFiles(currentPath));
+
+loadFiles('/srv');
+</script>
+{% endblock %}

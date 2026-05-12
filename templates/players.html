@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}Players - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Players</h1>
+    <p>{{ players|length }} player characters shown <button onclick="detectIps()" style="margin-left:15px;padding:4px 12px;background:var(--primary);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Detect IPs</button></p>
+</div>
+
+{% if tunnel_down %}
+<div class="error-banner danger">
+    <strong>SSH Tunnel Not Detected</strong><br>
+    Start the SSH tunnel first, then refresh.
+    <br><code>ssh -i $env:TEMP\dune-awakening-server-sshKey -L 15433:localhost:15433 -N dune@65.21.198.100</code>
+</div>
+{% elif db_error %}
+<div class="error-banner danger"><strong>Database Error:</strong> {{ db_error }}</div>
+{% else %}
+
+<form method="get" class="filters">
+    <input type="text" name="search" placeholder="Search name or ID..." value="{{ search }}">
+    <select name="faction">
+        <option value="">All Factions</option>
+        {% for f in factions %}
+        <option value="{{ f.id }}" {% if sel_faction|string == f.id|string %}selected{% endif %}>{{ f.name }}</option>
+        {% endfor %}
+    </select>
+    <select name="guild">
+        <option value="">All Guilds</option>
+        {% for g in guilds %}
+        <option value="{{ g.guild_id }}" {% if sel_guild|string == g.guild_id|string %}selected{% endif %}>{{ g.guild_name }}</option>
+        {% endfor %}
+    </select>
+    <select name="map">
+        <option value="">All Maps</option>
+        {% for m in maps %}
+        <option value="{{ m.map }}" {% if sel_map == m.map %}selected{% endif %}>{{ m.map }}</option>
+        {% endfor %}
+    </select>
+    <select name="online">
+        <option value="">Any Status</option>
+        <option value="online" {% if sel_online == 'online' %}selected{% endif %}>Online</option>
+        <option value="offline" {% if sel_online == 'offline' %}selected{% endif %}>Offline</option>
+    </select>
+    <button type="submit">Filter</button>
+    {% if search or sel_faction or sel_guild or sel_map or sel_online %}
+    <a href="/players" style="font-size:13px;color:var(--text-light);">Clear filters</a>
+    {% endif %}
+</form>
+
+<div class="card">
+    <div class="table-wrap">
+        <table id="players-table">
+            <thead>
+                <tr>
+                    <th data-col="name">Name</th>
+                    <th data-col="status">Status</th>
+                    <th data-col="faction">Faction</th>
+                    <th data-col="guild">Guild</th>
+                    <th data-col="map">Map</th>
+                    <th data-col="ip">IP Address</th>
+                    <th data-col="account">Account</th>
+                    <th data-col="vehicles" class="sort-desc">Vehicles</th>
+                    <th data-col="buildings">Buildings</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in players %}
+                <tr>
+                    <td><a href="/players/{{ p.id }}">{{ p.player_name or 'Unknown' }}</a></td>
+                    <td>{% if p.online_status %}<span class="badge badge-{{ p.online_status.lower() }}">{{ p.online_status }}</span>{% else %}<span class="badge badge-offline">Unknown</span>{% endif %}</td>
+                    <td>{% if p.faction_name %}<span class="badge badge-{{ p.faction_name.lower() }}">{{ p.faction_name }}</span>{% else %}&mdash;{% endif %}</td>
+                    <td>{% if p.guild_name %}{{ p.guild_name }}{% else %}&mdash;{% endif %}</td>
+                    <td>{{ p.map or '&mdash;'|safe }}</td>
+                    <td style="font-size:12px;">{% if p.player_controller_id %}<span class="ip-cell" data-id="{{ p.player_controller_id }}" data-ip="{{ p.ip_address or '' }}">{{ p.ip_address or '—' }}</span>{% else %}&mdash;{% endif %}</td>
+                    <td style="font-size:12px;">{{ p.funcom_id or p.account_email }}</td>
+                    <td>{{ p.vehicle_count }}</td>
+                    <td>{{ p.building_count }}</td>
+                    <td>{% if p.player_controller_id %}<button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="kick" style="padding:2px 8px;font-size:11px;background:#e67e22;color:#fff;border:none;border-radius:4px;cursor:pointer;">Kick</button> <button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="ban" style="padding:2px 8px;font-size:11px;background:#c0392b;color:#fff;border:none;border-radius:4px;cursor:pointer;">Ban</button> <button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="viewban" style="padding:2px 8px;font-size:11px;background:#3498db;color:#fff;border:none;border-radius:4px;cursor:pointer;">Info</button> <button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="history" style="padding:2px 8px;font-size:11px;background:#9b59b6;color:#fff;border:none;border-radius:4px;cursor:pointer;">History</button> <button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="unban" style="padding:2px 8px;font-size:11px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;">Unban</button>{% endif %}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="10" class="empty">No players found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('#players-table thead th').forEach(th => {
+    th.addEventListener('click', () => {
+        const tbody = document.querySelector('#players-table tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const col = Array.from(th.parentNode.children).indexOf(th);
+        const isAsc = th.classList.contains('sort-asc');
+        document.querySelectorAll('#players-table thead th').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+        th.classList.add(isAsc ? 'sort-desc' : 'sort-asc');
+        rows.sort((a, b) => {
+            const va = a.children[col]?.textContent.trim() || '';
+            const vb = b.children[col]?.textContent.trim() || '';
+            const na = parseFloat(va), nb = parseFloat(vb);
+            if (!isNaN(na) && !isNaN(nb)) return isAsc ? na - nb : nb - na;
+            return isAsc ? vb.localeCompare(va) : va.localeCompare(vb);
+        });
+        rows.forEach(r => tbody.appendChild(r));
+    });
+});
+document.querySelectorAll('.btn-action[data-action="kick"]').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const pid = this.dataset.id;
+        const name = this.dataset.name;
+        if (!confirm(`Kick player "${name}" for 60 seconds?`)) return;
+        try {
+            const form = new FormData();
+            form.append('player_id', pid);
+            const resp = await fetch('/api/kick_player', { method: 'POST', body: form });
+            const data = await resp.json();
+            alert(data.success ? data.message : 'Error: ' + (data.error || 'Failed'));
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    });
+});
+document.querySelectorAll('.btn-action[data-action="ban"]').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const pid = this.dataset.id;
+        const name = this.dataset.name;
+        const duration = prompt('Enter ban duration in minutes (0 = permanent):', '60');
+        if (duration === null) return;
+        const reason = prompt('Enter ban reason:', 'Violation of server rules');
+        if (reason === null) return;
+        const note = prompt('Enter admin note (optional):', '');
+        if (note === null) return;
+        try {
+            const form = new FormData();
+            form.append('player_id', pid);
+            form.append('duration', duration);
+            form.append('reason', reason);
+            form.append('note', note);
+            const resp = await fetch('/api/ban_player', { method: 'POST', body: form });
+            const data = await resp.json();
+            alert(data.success ? `Banned ${name} for ${duration} minutes` : 'Error: ' + (data.error || 'Failed'));
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    });
+});
+document.querySelectorAll('.btn-action[data-action="unban"]').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const pid = this.dataset.id;
+        const name = this.dataset.name;
+        if (!confirm(`Unban player "${name}" and remove IP block?`)) return;
+        try {
+            const form = new FormData();
+            form.append('player_id', pid);
+            const resp = await fetch('/api/unban_player', { method: 'POST', body: form });
+            const data = await resp.json();
+            alert(data.success ? `Unbanned ${name}` : 'Error: ' + (data.error || 'Failed'));
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    });
+});
+document.querySelectorAll('.btn-action[data-action="viewban"]').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const pid = this.dataset.id;
+        const name = this.dataset.name;
+        try {
+            const form = new FormData();
+            form.append('player_id', pid);
+            const resp = await fetch('/api/get_player_ban', { method: 'POST', body: form });
+            const data = await resp.json();
+            if (data.banned) {
+                alert(`Ban Info for ${name}:\n\nDuration: ${data.duration} minutes\nReason: ${data.reason}\nNote: ${data.note || 'None'}\nBanned: ${data.banned_at}\nExpires: ${data.expires_at}`);
+            } else {
+                alert(`${name} is not banned`);
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    });
+});
+document.querySelectorAll('.btn-action[data-action="history"]').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const pid = this.dataset.id;
+        const name = this.dataset.name;
+        try {
+            const form = new FormData();
+            form.append('player_id', pid);
+            const resp = await fetch('/api/get_player_history', { method: 'POST', body: form });
+            const data = await resp.json();
+            if (data.history && data.history.length > 0) {
+                let msg = `Action History for ${name}:\n\n`;
+                data.history.forEach(h => {
+                    const action = h.action.toUpperCase();
+                    const time = h.created_at ? h.created_at.replace('T', ' ').substring(0, 19) : '';
+                    const reason = h.reason || '';
+                    const ip = h.ip ? ` (IP: ${h.ip})` : '';
+                    msg += `${time} - ${action}: ${reason}${ip}\n`;
+                });
+                alert(msg);
+            } else {
+                alert(`No action history for ${name}`);
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    });
+});
+document.querySelectorAll('.ip-cell').forEach(cell => {
+    cell.style.cursor = 'pointer';
+    cell.style.textDecoration = 'underline';
+    cell.title = 'Click to edit IP';
+    cell.addEventListener('click', async function() {
+        const pid = this.dataset.id;
+        const currentIp = this.dataset.ip || '';
+        const newIp = prompt('Enter IP address for player:', currentIp);
+        if (newIp === null) return;
+        if (newIp !== currentIp) {
+            try {
+                const form = new FormData();
+                form.append('player_id', pid);
+                form.append('ip_address', newIp);
+                const resp = await fetch('/api/set_player_ip', { method: 'POST', body: form });
+                const data = await resp.json();
+                if (data.success) {
+                    this.textContent = newIp || '—';
+                    this.dataset.ip = newIp;
+                    alert('IP updated!');
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+    });
+});
+async function detectIps() {
+    try {
+        const btn = document.querySelector('button[onclick="detectIps()"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Detecting...'; }
+        const resp = await fetch('/api/detect_player_ips', { method: 'POST' });
+        const data = await resp.json();
+        if (data.success) {
+            console.log('IP detection:', data.message);
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Detect IPs'; }
+    } catch (e) {
+        console.log('IP detection failed:', e.message);
+        const btn = document.querySelector('button[onclick="detectIps()"]');
+        if (btn) { btn.disabled = false; btn.textContent = 'Detect IPs'; }
+    }
+}
+detectIps();
+</script>
+{% endblock %}

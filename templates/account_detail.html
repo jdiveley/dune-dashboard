@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ account.funcom_id if account and account.funcom_id else 'Account' }} - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+{% if tunnel_down %}
+<div class="error-banner danger"><strong>SSH Tunnel Not Detected</strong></div>
+{% elif db_error %}
+<div class="error-banner danger"><strong>Database Error:</strong> {{ db_error }}</div>
+{% elif not_found %}
+<div class="error-banner danger"><strong>Account Not Found</strong></div>
+{% else %}
+
+<div class="page-header">
+    <h1>{{ account.funcom_id or account.platform_name or 'Unknown Account' }}</h1>
+    <p>Account ID: {{ account.id }} &middot; {{ account.user }}</p>
+</div>
+
+<div class="detail-section">
+    <h2>Account Details</h2>
+    <div class="detail-grid">
+        <div class="detail-item">
+            <div class="dlabel">Funcom ID</div>
+            <div class="dvalue">{{ account.funcom_id or 'N/A' }}</div>
+        </div>
+        <div class="detail-item">
+            <div class="dlabel">User Hash</div>
+            <div class="dvalue" style="font-family:monospace;font-size:12px;">{{ account.user }}</div>
+        </div>
+        <div class="detail-item">
+            <div class="dlabel">Platform</div>
+            <div class="dvalue">{{ account.platform_name or 'N/A' }}</div>
+        </div>
+        <div class="detail-item">
+            <div class="dlabel">Platform ID</div>
+            <div class="dvalue" style="font-size:12px;">{{ account.platform_id or 'N/A' }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="detail-section">
+    <h2>Characters ({{ characters|length }})</h2>
+    <div class="card">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Actor ID</th>
+                        <th>Map</th>
+                        <th>Faction</th>
+                        <th>Last Login</th>
+                        <th>Position</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in characters %}
+                    <tr>
+                        <td><a href="/players/{{ c.id }}">{{ c.player_name or 'Unknown' }}</a></td>
+                        <td>{% if c.online_status %}<span class="badge badge-{{ c.online_status.lower() }}">{{ c.online_status }}</span>{% else %}&mdash;{% endif %}</td>
+                        <td>{{ c.id }}</td>
+                        <td>{{ c.map or 'N/A' }}</td>
+                        <td>{% if c.faction_name %}<span class="badge badge-{{ c.faction_name.lower() }}">{{ c.faction_name }}</span>{% else %}&mdash;{% endif %}</td>
+                        <td style="font-size:11px;">{{ c.last_login_time.strftime('%Y-%m-%d %H:%M') if c.last_login_time else 'N/A' }}</td>
+                        <td style="font-size:10px;font-family:monospace;max-width:180px;word-break:break-all;">{{ c.transform_text or '' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="empty">No characters on this account</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

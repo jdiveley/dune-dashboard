@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Overview - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Server Overview</h1>
+    <p>Real-time statistics from the Dune Awakening game database</p>
+</div>
+
+{% if tunnel_down %}
+<div class="error-banner danger">
+    <strong>SSH Tunnel Not Detected</strong><br>
+    The PostgreSQL database is not reachable. Start the SSH tunnel in a separate terminal:
+    <br><br>
+    <code>$key = "$env:TEMP\dune-awakening-server-sshKey"</code><br>
+    <code>ssh -i $key -L 15433:localhost:15433 -N dune@65.21.198.100</code>
+</div>
+{% elif db_error %}
+<div class="error-banner danger">
+    <strong>Database Error</strong><br>
+    {{ db_error }}
+</div>
+{% else %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="label">Accounts</div>
+        <div class="value">{{ account_count }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Player Characters</div>
+        <div class="value">{{ player_count }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Online Now</div>
+        <div class="value online">{{ online_count }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Vehicles</div>
+        <div class="value">{{ vehicle_count }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Buildings</div>
+        <div class="value">{{ building_count }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Guilds</div>
+        <div class="value">{{ guild_count }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Total Actors</div>
+        <div class="value">{{ actor_count }}</div>
+    </div>
+</div>
+
+{% if players_online %}
+<div class="card" style="margin-bottom:20px;">
+    <div class="card-header">Online Players</div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Character</th><th>Map</th><th>Status</th></tr></thead>
+            <tbody>
+                {% for p in players_online %}
+                <tr>
+                    <td><a href="/players/{{ p.pawn_id }}">{{ p.character_name or 'Unknown' }}</a></td>
+                    <td>{{ p.map or 'N/A' }}</td>
+                    <td><span class="badge badge-{{ p.online_status.lower() }}">{{ p.online_status }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div class="card">
+        <div class="card-header">Faction Distribution</div>
+        <div class="card-body">
+            {% if faction_dist %}
+            {% set total = faction_dist | sum(attribute='count') %}
+            {% for f in faction_dist %}
+            <div class="faction-bar">
+                <span class="bar-label badge badge-{{ f.name.lower() if f.name != 'None' else 'neutral' }}">{{ 'Neutral' if f.name == 'None' else f.name }}</span>
+                <div class="bar-bg">
+                    <div class="bar-fill {{ f.name.lower() if f.name != 'None' else 'neutral' }}" style="width:{{ (f.count / total * 100)|round(1) if total > 0 else 0 }}%;"></div>
+                </div>
+                <span class="bar-count">{{ f.count }}</span>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty">No faction data available</div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header">Players Per Map</div>
+        <div class="card-body">
+            {% if per_map %}
+            {% set pmap_total = per_map | sum(attribute='count') %}
+            {% for m in per_map %}
+            <div class="faction-bar">
+                <span class="bar-label" style="font-weight:600;">{{ m.map }}</span>
+                <div class="bar-bg">
+                    <div class="bar-fill" style="background:var(--primary);width:{{ (m.count / pmap_total * 100)|round(1) if pmap_total > 0 else 0 }}%;"></div>
+                </div>
+                <span class="bar-count">{{ m.count }}</span>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty">No players found on any map</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Accounts - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Accounts</h1>
+    <p>{{ accounts|length }} accounts shown</p>
+</div>
+
+{% if tunnel_down %}
+<div class="error-banner danger">
+    <strong>SSH Tunnel Not Detected</strong><br>
+    Start the SSH tunnel first, then refresh.
+</div>
+{% elif db_error %}
+<div class="error-banner danger"><strong>Database Error:</strong> {{ db_error }}</div>
+{% else %}
+
+<div class="card">
+    <div class="table-wrap">
+        <table id="accounts-table">
+            <thead>
+                <tr>
+                    <th data-col="name">Funcom ID</th>
+                    <th data-col="char">Character</th>
+                    <th data-col="status">Status</th>
+                    <th data-col="user">User Hash</th>
+                    <th data-col="platform">Platform ID</th>
+                    <th data-col="chars">Characters</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in accounts %}
+                <tr>
+                    <td><a href="/accounts/{{ a.id }}">{{ a.funcom_id or a.platform_name or 'Unknown' }}</a></td>
+                    <td>{{ a.character_name or '&mdash;'|safe }}</td>
+                    <td>{% if a.online_status %}<span class="badge badge-{{ a.online_status.lower() }}">{{ a.online_status }}</span>{% else %}&mdash;{% endif %}</td>
+                    <td style="font-size:11px;font-family:monospace;">{{ a.user }}</td>
+                    <td style="font-size:11px;">{{ a.platform_id or 'N/A' }}</td>
+                    <td>{{ a.player_count }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="empty">No accounts found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('#accounts-table thead th').forEach(th => {
+    th.addEventListener('click', () => {
+        const tbody = document.querySelector('#accounts-table tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const col = Array.from(th.parentNode.children).indexOf(th);
+        const isAsc = th.classList.contains('sort-asc');
+        document.querySelectorAll('#accounts-table thead th').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+        th.classList.add(isAsc ? 'sort-desc' : 'sort-asc');
+        rows.sort((a, b) => {
+            const va = a.children[col]?.textContent.trim() || '';
+            const vb = b.children[col]?.textContent.trim() || '';
+            const na = parseFloat(va), nb = parseFloat(vb);
+            if (!isNaN(na) && !isNaN(nb)) return isAsc ? na - nb : nb - na;
+            return isAsc ? vb.localeCompare(va) : va.localeCompare(vb);
+        });
+        rows.forEach(r => tbody.appendChild(r));
+    });
+});
+</script>
+{% endblock %}

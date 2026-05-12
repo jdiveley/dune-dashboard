@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Local config (contains credentials)
+settings.yaml
+config_local.py
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# SSH keys
+*.pem
+*sshKey*
+dune-tunnel-key
+dune-awakening-server-sshKey
+internal-scripts/ssh/sshKey
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite3
+
+# Temporary files
+*.tmp
+*.bak
+
+# PowerShell profiles
+Microsoft.PowerShell_profile.ps1
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+.pytest_cache/

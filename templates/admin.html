@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Admin - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Admin</h1>
+    <p>Server administration and bans</p>
+</div>
+
+<div class="card" style="margin-bottom:16px;">
+    <div class="card-body" style="padding:12px 16px;background:var(--bg-hover);border-left:3px solid var(--accent);">
+        <strong>Upcoming Feature:</strong> Advanced admin tools (live command execution, player management, server config editor) are currently in development.
+    </div>
+</div>
+
+{% if tunnel_down %}
+<div class="error-banner danger"><strong>SSH Tunnel Not Detected</strong></div>
+{% else %}
+
+<div class="card">
+    <div class="card-header">Bans ({{ bans|length }})</div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>ID</th><th>Player</th><th>Reason</th><th>Status</th><th>Banned At</th><th>Expires</th></tr>
+            </thead>
+            <tbody>
+                {% for b in bans %}
+                <tr>
+                    <td>{{ b.id }}</td>
+                    <td>{{ b.character_name or b.player_id or '-' }}</td>
+                    <td>{{ b.reason or '-' }}</td>
+                    <td><span class="badge badge-{{ 'success' if b.active else 'danger' }}">{{ 'Active' if b.active else 'Inactive' }}</span></td>
+                    <td style="font-size:11px;">{{ b.banned_at.strftime('%Y-%m-%d %H:%M') if b.banned_at else '-' }}</td>
+                    <td style="font-size:11px;">{{ b.expires_at.strftime('%Y-%m-%d %H:%M') if b.expires_at else 'Never' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="empty">No bans found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}

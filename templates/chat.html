@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Chat Logs - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Chat Logs</h1>
+    <p>Parsed from text router pod logs &middot; <span id="last-updated">Never</span></p>
+</div>
+
+{% if tunnel_down %}
+<div class="error-banner danger"><strong>SSH Tunnel Not Detected</strong></div>
+{% elif db_error %}
+<div class="error-banner danger"><strong>Database Error:</strong> {{ db_error }}</div>
+{% else %}
+
+<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+    <button id="refresh-chat" style="padding:8px 16px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Refresh</button>
+    <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--text-light);cursor:pointer;">
+        <input type="checkbox" id="auto-refresh" style="cursor:pointer;"> Auto-refresh (30s)
+    </label>
+    <select id="filter-channel" style="padding:6px 12px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:13px;">
+        <option value="all">All Channels</option>
+        <option value="Proximity">Proximity</option>
+        <option value="Map">Map</option>
+        <option value="Faction">Faction</option>
+        <option value="Guild">Guild</option>
+        <option value="Party">Party</option>
+        <option value="Whisper">Whisper</option>
+        <option value="Private">Private</option>
+    </select>
+    <span style="font-size:12px;color:var(--text-muted);">Showing last 500 log lines</span>
+</div>
+
+<div id="chat-container">
+    <div id="chat-loading" style="text-align:center;padding:40px;color:var(--text-muted);">Loading chat logs...</div>
+    <div id="chat-messages" style="display:none;"></div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CHANNEL_COLORS = {
+    'Proximity': '#2ecc71',
+    'Map': '#3498db',
+    'Faction': '#e74c3c',
+    'Guild': '#9b59b6',
+    'Whisper': '#f39c12',
+    'Party': '#e67e22',
+    'Private': '#f1c40f',
+};
+
+function formatTimestamp(ts) {
+    if (!ts) return '';
+    const parts = ts.replace(/\./g, '-').split('-');
+    if (parts.length >= 6) {
+        return `${parts[0]}-${parts[1]}-${parts[2]} ${parts[3]}:${parts[4]}:${parts[5]}`;
+    }
+    return ts;
+}
+
+function renderMessages(messages) {
+    const container = document.getElementById('chat-messages');
+    const filter = document.getElementById('filter-channel').value;
+
+    const filtered = filter === 'all' ? messages : messages.filter(m => m.channel === filter);
+
+    if (filtered.length === 0) {
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">No chat messages found</div>';
+        container.style.display = 'block';
+        return;
+    }
+
+    let html = '';
+    for (const msg of filtered) {
+        const color = CHANNEL_COLORS[msg.channel] || '#95a5a6';
+        const time = formatTimestamp(msg.timestamp);
+        const coords = msg.location && msg.location.X !== 0 ? ` (${msg.location.X.toFixed(0)}, ${msg.location.Y.toFixed(0)})` : '';
+        const target = msg.target && msg.target !== '' ? ` &rarr; ${escapeHtml(msg.target)}` : '';
+        html += `<div class="chat-msg" data-channel="${msg.channel}">
+            <span class="chat-time">${time}</span>
+            <span class="chat-channel" style="color:${color};">[${msg.channel}]</span>
+            <span class="chat-sender">${escapeHtml(msg.sender)}</span>${target}
+            <span class="chat-text">${escapeHtml(msg.message)}</span>
+            ${coords ? `<span class="chat-coords">${coords}</span>` : ''}
+        </div>`;
+    }
+    container.innerHTML = html;
+    container.style.display = 'block';
+    document.getElementById('chat-loading').style.display = 'none';
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+async function loadChat() {
+    const loading = document.getElementById('chat-loading');
+    const messages = document.getElementById('chat-messages');
+    loading.style.display = 'block';
+    messages.style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/chat_logs');
+        const data = await resp.json();
+        if (data.success) {
+            renderMessages(data.messages);
+            document.getElementById('last-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+        } else {
+            loading.textContent = 'Error: ' + (data.error || 'Failed to load chat logs');
+        }
+    } catch (e) {
+        loading.textContent = 'Error: ' + e.message;
+    }
+}
+
+document.getElementById('refresh-chat')?.addEventListener('click', loadChat);
+document.getElementById('filter-channel')?.addEventListener('change', () => {
+    const filter = document.getElementById('filter-channel').value;
+    document.querySelectorAll('.chat-msg').forEach(el => {
+        el.style.display = (filter === 'all' || el.dataset.channel === filter) ? '' : 'none';
+    });
+});
+
+let autoInterval = null;
+document.getElementById('auto-refresh')?.addEventListener('change', function() {
+    if (this.checked) {
+        autoInterval = setInterval(loadChat, 30000);
+    } else {
+        clearInterval(autoInterval);
+    }
+});
+
+loadChat();
+</script>
+{% endblock %}

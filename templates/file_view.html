@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}View File - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>File Viewer</h1>
+    <p id="view-path">{{ path }}</p>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="view-toolbar">
+            <div class="view-info">
+                <span id="view-mode-badge" class="badge">View Mode</span>
+            </div>
+            <div class="view-actions">
+                <button id="edit-btn" class="view-btn" onclick="toggleEdit()">Edit</button>
+                <button id="save-btn" class="view-btn primary" style="display:none;" onclick="saveFile()">Save</button>
+                <button id="cancel-btn" class="view-btn" style="display:none;" onclick="cancelEdit()">Cancel</button>
+            </div>
+        </div>
+        <div id="view-loading" style="padding:20px;text-align:center;color:var(--text-muted);">Loading file...</div>
+        <div id="view-error" class="error-banner danger" style="display:none;"></div>
+        <div id="view-success" class="error-banner success" style="display:none;">File saved successfully!</div>
+        <pre id="view-content" style="display:none;background:var(--bg);padding:16px;border-radius:8px;font-size:12px;overflow-x:auto;white-space:pre-wrap;max-height:80vh;line-height:1.5;color:var(--text);"></pre>
+        <textarea id="edit-content" style="display:none;background:var(--bg);padding:16px;border-radius:8px;font-size:12px;overflow-x:auto;white-space:pre-wrap;max-height:80vh;line-height:1.5;color:var(--text);border:1px solid var(--border);width:100%;min-height:60vh;font-family:monospace;resize:vertical;box-sizing:border-box;"></textarea>
+    </div>
+</div>
+
+<style>
+.view-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.view-info { display: flex; gap: 8px; align-items: center; }
+.view-actions { display: flex; gap: 8px; }
+.view-btn { padding: 6px 14px; background: var(--bg-card); color: var(--text); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 13px; }
+.view-btn:hover { background: var(--bg-hover); }
+.view-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.view-btn.primary:hover { background: var(--primary-dark); }
+.badge { padding: 3px 10px; border-radius: 12px; font-size: 12px; background: var(--bg-hover); color: var(--text-muted); }
+.badge.edit { background: var(--accent); color: #fff; }
+.error-banner.success { background: #1a3a2a; border-color: #2d6a4f; color: #95d5b2; }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const filePath = '{{ path }}';
+let originalContent = '';
+
+async function loadFile() {
+    const loading = document.getElementById('view-loading');
+    const error = document.getElementById('view-error');
+    const content = document.getElementById('view-content');
+    try {
+        const resp = await fetch(`/api/files/view?path=${encodeURIComponent(filePath)}`);
+        const data = await resp.json();
+        loading.style.display = 'none';
+        if (!data.success) {
+            error.textContent = 'Error: ' + (data.error || 'Failed to load file');
+            error.style.display = 'block';
+            return;
+        }
+        originalContent = data.content;
+        content.textContent = data.content;
+        content.style.display = 'block';
+    } catch (e) {
+        loading.style.display = 'none';
+        error.textContent = 'Request failed: ' + e.message;
+        error.style.display = 'block';
+    }
+}
+
+function toggleEdit() {
+    const content = document.getElementById('view-content');
+    const editor = document.getElementById('edit-content');
+    const editBtn = document.getElementById('edit-btn');
+    const saveBtn = document.getElementById('save-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+    const badge = document.getElementById('view-mode-badge');
+
+    editor.value = originalContent;
+    content.style.display = 'none';
+    editor.style.display = 'block';
+    editBtn.style.display = 'none';
+    saveBtn.style.display = 'inline-block';
+    cancelBtn.style.display = 'inline-block';
+    badge.textContent = 'Edit Mode';
+    badge.classList.add('edit');
+    editor.focus();
+}
+
+function cancelEdit() {
+    const content = document.getElementById('view-content');
+    const editor = document.getElementById('edit-content');
+    const editBtn = document.getElementById('edit-btn');
+    const saveBtn = document.getElementById('save-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+    const badge = document.getElementById('view-mode-badge');
+
+    content.style.display = 'block';
+    editor.style.display = 'none';
+    editBtn.style.display = 'inline-block';
+    saveBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    badge.textContent = 'View Mode';
+    badge.classList.remove('edit');
+}
+
+async function saveFile() {
+    const saveBtn = document.getElementById('save-btn');
+    const success = document.getElementById('view-success');
+    const error = document.getElementById('view-error');
+    const editor = document.getElementById('edit-content');
+
+    saveBtn.textContent = 'Saving...';
+    saveBtn.disabled = true;
+    success.style.display = 'none';
+    error.style.display = 'none';
+
+    try {
+        const form = new FormData();
+        form.append('path', filePath);
+        form.append('content', editor.value);
+        const resp = await fetch('/api/files/save', { method: 'POST', body: form });
+        const data = await resp.json();
+        if (!data.success) {
+            error.textContent = 'Error: ' + (data.error || 'Failed to save file');
+            error.style.display = 'block';
+        } else {
+            originalContent = editor.value;
+            document.getElementById('view-content').textContent = originalContent;
+            success.style.display = 'block';
+            setTimeout(() => { success.style.display = 'none'; }, 3000);
+        }
+    } catch (e) {
+        error.textContent = 'Request failed: ' + e.message;
+        error.style.display = 'block';
+    }
+
+    saveBtn.textContent = 'Save';
+    saveBtn.disabled = false;
+}
+
+loadFile();
+</script>
+{% endblock %}

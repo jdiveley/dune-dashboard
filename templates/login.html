@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Dune Dashboard</title>
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --bg-card: #12121a;
+            --border: #2a2a3a;
+            --text: #e0e0e0;
+            --text-muted: #888;
+            --accent: #d4a853;
+            --accent-hover: #e8bc6a;
+            --danger: #e74c3c;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 400px;
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .login-header h1 {
+            color: var(--accent);
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .login-header p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 1rem;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .btn-login {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+        .btn-login:hover {
+            background: var(--accent-hover);
+        }
+        .flash-error {
+            background: rgba(231, 76, 60, 0.1);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 0.75rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1>DUNE DASHBOARD</h1>
+            <p>Server Administration Panel</p>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        {% for message in messages %}
+        <div class="flash-error">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <form method="POST">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit" class="btn-login">Sign In</button>
+        </form>
+    </div>
+</body>
+</html>

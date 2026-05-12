@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Vehicles - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Vehicles</h1>
+    <p>{{ vehicles|length }} vehicles shown</p>
+</div>
+
+{% if tunnel_down %}
+<div class="error-banner danger"><strong>SSH Tunnel Not Detected</strong></div>
+{% elif db_error %}
+<div class="error-banner danger"><strong>Database Error:</strong> {{ db_error }}</div>
+{% else %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">
+    <div class="stat-card">
+        <div class="label">Total Vehicles</div>
+        <div class="value">{{ vehicles|length }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Currently Piloted</div>
+        <div class="value">{{ vehicles|selectattr('pilot_name')|list|length }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Owned by Players</div>
+        <div class="value">{{ vehicles|selectattr('owner_name')|list|length }}</div>
+    </div>
+</div>
+
+<div style="margin-bottom:16px;">
+    <button id="group-toggle" style="padding:8px 16px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Group by Type</button>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table id="vehicles-table">
+            <thead>
+                <tr>
+                    <th data-col="id">ID</th>
+                    <th data-col="type">Type</th>
+                    <th data-col="name">Name</th>
+                    <th data-col="owner">Owner</th>
+                    <th data-col="pilot">Piloted By</th>
+                    <th data-col="map">Map</th>
+                    <th data-col="pos">Position</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="vehicles-tbody">
+                {% for v in vehicles %}
+                <tr data-type="{{ v.class | class_name }}" data-owner="{{ v.owner_name or '' }}">
+                    <td><a href="/vehicles/{{ v.id }}">{{ v.id }}</a></td>
+                    <td style="font-size:12px;">{{ v.class | class_name }}</td>
+                    <td>{{ v.actor_name or 'N/A' }}</td>
+                    <td>{% if v.owner_name %}<a href="/players/{{ v.owner_pawn_id }}" style="font-weight:500;">{{ v.owner_name }}</a>{% else %}&mdash;{% endif %}</td>
+                    <td>{% if v.pilot_name %}<span class="badge badge-online">Active</span> <a href="/players/{{ v.pilot_pawn_id }}">{{ v.pilot_name }}</a>{% else %}&mdash;{% endif %}</td>
+                    <td>{{ v.map or 'N/A' }}</td>
+                    <td style="font-size:11px;font-family:monospace;max-width:250px;word-break:break-all;">{{ v.transform_text or '' }}</td>
+                    <td><button class="btn-delete" data-id="{{ v.id }}" data-type="vehicle" title="Delete">🗑️</button></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="empty">No vehicles found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('#vehicles-table thead th').forEach(th => {
+    th.addEventListener('click', () => {
+        const tbody = document.getElementById('vehicles-tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const col = Array.from(th.parentNode.children).indexOf(th);
+        const isAsc = th.classList.contains('sort-asc');
+        document.querySelectorAll('#vehicles-table thead th').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+        th.classList.add(isAsc ? 'sort-desc' : 'sort-asc');
+        rows.sort((a, b) => {
+            const va = a.children[col]?.textContent.trim() || '';
+            const vb = b.children[col]?.textContent.trim() || '';
+            const na = parseFloat(va), nb = parseFloat(vb);
+            if (!isNaN(na) && !isNaN(nb)) return isAsc ? na - nb : nb - na;
+            return isAsc ? vb.localeCompare(va) : va.localeCompare(vb);
+        });
+        rows.forEach(r => tbody.appendChild(r));
+    });
+});
+
+let grouped = false;
+document.getElementById('group-toggle')?.addEventListener('click', function() {
+    const tbody = document.getElementById('vehicles-tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    if (!grouped) {
+        const groups = {};
+        rows.forEach(r => {
+            const type = r.dataset.type || 'Other';
+            if (!groups[type]) groups[type] = [];
+            groups[type].push(r);
+        });
+        tbody.innerHTML = '';
+        Object.keys(groups).sort().forEach(type => {
+            const h = document.createElement('tr');
+            h.innerHTML = `<td colspan="8" style="background:#f8f6f2;font-weight:600;padding:8px 14px;font-size:13px;">${type} (${groups[type].length})</td>`;
+            tbody.appendChild(h);
+            groups[type].forEach(r => tbody.appendChild(r));
+        });
+        this.textContent = 'Ungroup';
+        grouped = true;
+    } else {
+        const all = [];
+        rows.forEach(r => { if (!r.classList.contains('group-header')) all.push(r); });
+        tbody.innerHTML = '';
+        all.forEach(r => tbody.appendChild(r));
+        this.textContent = 'Group by Type';
+        grouped = false;
+    }
+});
+
+document.querySelectorAll('.btn-delete').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const id = this.dataset.id;
+        const type = this.dataset.type;
+        if (!confirm(`Are you sure you want to delete this ${type}?`)) return;
+        try {
+            const resp = await fetch(`/api/${type === 'vehicle' ? 'vehicles' : 'buildings'}/${id}`, { method: 'DELETE' });
+            const data = await resp.json();
+            if (data.success) {
+                this.closest('tr').remove();
+            } else {
+                alert('Error: ' + (data.error || 'Failed to delete'));
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    });
+});
+</script>
+{% endblock %}

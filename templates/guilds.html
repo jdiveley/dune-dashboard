@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Guilds - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Guilds</h1>
+    <p>{{ guilds|length }} guilds</p>
+</div>
+
+{% if tunnel_down %}
+<div class="error-banner danger">
+    <strong>SSH Tunnel Not Detected</strong><br>
+    Start the SSH tunnel first, then refresh.
+    <br><code>ssh -i $env:TEMP\dune-awakening-server-sshKey -L 15433:localhost:15433 -N dune@65.21.198.100</code>
+</div>
+{% elif db_error %}
+<div class="error-banner danger"><strong>Database Error:</strong> {{ db_error }}</div>
+{% else %}
+
+<div class="card">
+    <div class="table-wrap">
+        <table id="guilds-table">
+            <thead>
+                <tr>
+                    <th data-col="name">Name</th>
+                    <th data-col="faction">Faction</th>
+                    <th data-col="members">Members</th>
+                    <th data-col="online">Online</th>
+                    <th data-col="description">Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for g in guilds %}
+                <tr>
+                    <td><a href="/guilds/{{ g.guild_id }}">{{ g.guild_name }}</a></td>
+                    <td>{% if g.faction_name %}<span class="badge badge-{{ g.faction_name.lower() }}">{{ g.faction_name }}</span>{% else %}<span class="badge badge-neutral">Neutral</span>{% endif %}</td>
+                    <td>{{ g.member_count }}</td>
+                    <td>{% if g.online_count %}{{ g.online_count }}{% else %}0{% endif %}</td>
+                    <td style="font-size:12px;color:var(--text-light);">{% if g.guild_description %}{{ g.guild_description[:80] }}{% if g.guild_description|length > 80 %}...{% endif %}{% else %}&mdash;{% endif %}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-light);">No guilds found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('#guilds-table thead th').forEach(th => {
+    th.addEventListener('click', () => {
+        const tbody = document.querySelector('#guilds-table tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const col = Array.from(th.parentNode.children).indexOf(th);
+        const isAsc = th.classList.contains('sort-asc');
+        document.querySelectorAll('#guilds-table thead th').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+        th.classList.add(isAsc ? 'sort-desc' : 'sort-asc');
+        rows.sort((a, b) => {
+            const va = a.children[col]?.textContent.trim() || '';
+            const vb = b.children[col]?.textContent.trim() || '';
+            const na = parseFloat(va), nb = parseFloat(vb);
+            if (!isNaN(na) && !isNaN(nb)) return isAsc ? na - nb : nb - na;
+            return isAsc ? vb.localeCompare(va) : va.localeCompare(vb);
+        });
+        rows.forEach(r => tbody.appendChild(r));
+    });
+});
+</script>
+{% endblock %}

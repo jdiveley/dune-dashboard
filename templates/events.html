@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Events - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Game Events</h1>
+    <p>Recent activity from the game event log</p>
+    <p style="font-size:11px;color:var(--text-muted);">Note: Solaris currency events may show incomplete history. Delta values may not sum to current balance.</p>
+</div>
+
+{% if tunnel_down %}
+<div class="error-banner danger"><strong>SSH Tunnel Not Detected</strong></div>
+{% elif db_error %}
+<div class="error-banner danger"><strong>Database Error:</strong> {{ db_error }}</div>
+{% else %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div class="card">
+        <div class="card-header">Game Events ({{ game_events|length }})</div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Time</th><th>Actor</th><th>Map</th><th>Type</th><th>Player</th><th>Position</th></tr>
+                </thead>
+                <tbody>
+                    {% for e in game_events %}
+                    <tr>
+                        <td style="font-size:11px;white-space:nowrap;">{{ e.universe_time.strftime('%Y-%m-%d %H:%M') if e.universe_time else '' }}</td>
+                        <td>{{ e.actor_id }}</td>
+                        <td>{{ e.map or '' }}</td>
+                        <td>{{ e.event_type }}</td>
+                        <td>{% if e.actor_name %}{{ e.actor_name }}{% else %}&mdash;{% endif %}</td>
+                        <td style="font-size:11px;font-family:monospace;">{% if e.x %}{{ e.x|round(0)|int }}, {{ e.y|round(0)|int }}, {{ e.z|round(0)|int }}{% endif %}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="empty">No game events found</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Event Log ({{ event_logs|length }})</div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Time</th><th>Category</th><th>Function</th><th>Message</th><th>Details</th></tr>
+                </thead>
+                <tbody>
+                    {% for e in event_logs %}
+                    <tr>
+                        <td style="font-size:11px;white-space:nowrap;">{{ e.event_time.strftime('%Y-%m-%d %H:%M') if e.event_time else '' }}</td>
+                        <td><span class="badge badge-{{ e.category.lower() if e.category else 'none' }}">{{ e.category or '' }}</span></td>
+                        <td style="font-size:11px;font-family:monospace;">{{ e.function_name or '' }}</td>
+                        <td style="font-size:12px;">{{ e.message or '' }}</td>
+                        <td style="font-size:10px;max-width:250px;word-break:break-word;">{% if e.meta %}<pre style="margin:0;font-size:10px;white-space:pre-wrap;">{{ e.meta | json_format }}</pre>{% endif %}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="empty">No event logs found</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}

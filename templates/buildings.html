@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Buildings - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Buildings / Properties</h1>
+    <p>{{ buildings|length }} buildings shown</p>
+</div>
+
+{% if tunnel_down %}
+<div class="error-banner danger"><strong>SSH Tunnel Not Detected</strong></div>
+{% elif db_error %}
+<div class="error-banner danger"><strong>Database Error:</strong> {{ db_error }}</div>
+{% else %}
+
+<div class="card">
+    <div class="table-wrap">
+        <table id="buildings-table">
+            <thead>
+                <tr>
+                    <th data-col="id">ID</th>
+                    <th data-col="owner">Owner</th>
+                    <th data-col="type">Building Type</th>
+                    <th data-col="map">Map</th>
+                    <th data-col="power">Power</th>
+                    <th data-col="instances">Instances</th>
+                    <th data-col="pos">Position</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in buildings %}
+                <tr>
+                    <td>{{ b.id }}</td>
+                    <td>{{ b.owner_name or 'Unknown' }}</td>
+                    <td style="font-size:12px;">{{ b.class | class_name }}</td>
+                    <td>{{ b.map or 'N/A' }}</td>
+                    <td>{% if b.is_powered == 'True' %}<span class="badge badge-online">Powered</span>{% elif b.is_powered == 'False' %}<span class="badge" style="background:#666;color:#fff;">Unpowered</span>{% else %}?{% endif %}</td>
+                    <td>{{ b.instance_count }}</td>
+                    <td style="font-size:11px;font-family:monospace;max-width:200px;word-break:break-all;">{{ b.transform_text or '' }}</td>
+                    <td><button class="btn-delete" data-id="{{ b.id }}" data-type="building" title="Delete">🗑️</button></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="empty">No buildings found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('#buildings-table thead th').forEach(th => {
+    th.addEventListener('click', () => {
+        const tbody = document.querySelector('#buildings-table tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const col = Array.from(th.parentNode.children).indexOf(th);
+        const isAsc = th.classList.contains('sort-asc');
+        document.querySelectorAll('#buildings-table thead th').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+        th.classList.add(isAsc ? 'sort-desc' : 'sort-asc');
+        rows.sort((a, b) => {
+            const va = a.children[col]?.textContent.trim() || '';
+            const vb = b.children[col]?.textContent.trim() || '';
+            const na = parseFloat(va), nb = parseFloat(vb);
+            if (!isNaN(na) && !isNaN(nb)) return isAsc ? na - nb : nb - na;
+            return isAsc ? vb.localeCompare(va) : va.localeCompare(vb);
+        });
+        rows.forEach(r => tbody.appendChild(r));
+    });
+});
+
+document.querySelectorAll('.btn-delete').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const id = this.dataset.id;
+        const type = this.dataset.type;
+        if (!confirm(`Are you sure you want to delete this ${type}?`)) return;
+        try {
+            const resp = await fetch(`/api/${type === 'vehicle' ? 'vehicles' : 'buildings'}/${id}`, { method: 'DELETE' });
+            const data = await resp.json();
+            if (data.success) {
+                this.closest('tr').remove();
+            } else {
+                alert('Error: ' + (data.error || 'Failed to delete'));
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    });
+});
+</script>
+{% endblock %}
