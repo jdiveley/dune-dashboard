@@ -13,6 +13,8 @@ A comprehensive web-based management dashboard for Dune: Awakening private serve
 2. Follow the prompts
 3. Double-click `start.bat` to launch
 
+> **Tip**: Ensure your SSH key is in `internal-scripts/ssh/sshKey` before running setup.
+
 > **Beta Release** — Feature complete for core functionality. Report issues on GitHub.
 
 > **Beta Release** — Feature complete for core functionality. Report issues on GitHub.
