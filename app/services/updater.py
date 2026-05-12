@@ -68,15 +68,15 @@ class UpdateService:
                 data = json.loads(resp.read().decode())
                 self._latest_sha = data['commit']['sha']
 
-            # Try to get current SHA from .git/refs/heads/main
-            git_ref = os.path.join(self.project_root, '.git', 'refs', 'heads', 'main')
-            if os.path.exists(git_ref):
-                with open(git_ref) as f:
+            # Get current SHA from VERSION file (works for zip downloads)
+            version_file = os.path.join(self.project_root, 'VERSION')
+            if os.path.exists(version_file):
+                with open(version_file) as f:
                     self._current_sha = f.read().strip()
 
             self._update_available = self._latest_sha != self._current_sha
             self._last_check = time.time()
-            logger.info(f"Update check: {'available' if self._update_available else 'up to date'}")
+            logger.info(f"Update check: {'available' if self._update_available else 'up to date'} (local={self._current_sha}, remote={self._latest_sha})")
         except Exception as e:
             logger.debug(f"Update check error: {e}")
 
@@ -160,6 +160,11 @@ class UpdateService:
 
             # Cleanup temp
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+            # Update VERSION file to match new commit
+            version_file = os.path.join(self.project_root, 'VERSION')
+            with open(version_file, 'w') as f:
+                f.write(self._latest_sha + '\n')
 
             self._update_status = f"Update applied! {files_updated} files updated. Restarting..."
             self._update_available = False
