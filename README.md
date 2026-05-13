@@ -24,7 +24,7 @@ A comprehensive web-based management dashboard for Dune: Awakening private serve
 - **File Browser**: Secure SSH-based file browser for server configuration and logs.
 - **Shell Access**: Interactive VM and Kubernetes pod shells directly in the browser.
 - **Admin Tools**: Ban management, IP detection, kick/unban functionality, and player history.
-- **Firewall Security**: Block unauthenticated game server ports (File Browser, Director, PostgreSQL) from external internet access. Applied via iptables on the game server VM. Configurable per-port during setup or from the Server page.
+- **Firewall Security**: Block unauthenticated game server ports (File Browser, Director, PostgreSQL) from external internet access. Applied via iptables on the game server VM across INPUT, FORWARD, and mangle PREROUTING chains to cover both host services and Kubernetes NodePort traffic. Configurable per-port during setup or from the Server page.
 - **Vehicles & Buildings**: Track owned vehicles, modules, and player structures.
 - **Auto-Update**: Background checker polls GitHub for new commits. Safe file replacement preserves your settings, logs, and SSH keys. One-click update from the dashboard.
 - **Remote Access**: Built-in support for HTTPS and binding to `0.0.0.0` for secure remote management.
