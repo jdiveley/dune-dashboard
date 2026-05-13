@@ -75,5 +75,10 @@ htmlcov/
 coverage.xml
 .pytest_cache/
 
+# Temporary/exploratory scripts
+temp_*.py
+temp_*.ps1
+temp_*.sh
+
 # AI-generated analysis docs
 AI_DOCS/

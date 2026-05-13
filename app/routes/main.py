@@ -16,7 +16,6 @@ def register_routes(app, services, settings):
     player_svc = services['player']
     vehicle_svc = services['vehicle']
     chat_svc = services['chat']
-    admin_svc = services['admin']
     static_cache = services['static_cache']
 
     def fmt_role(role_id):
@@ -375,16 +374,6 @@ def register_routes(app, services, settings):
     def director_page():
         director_port = settings.get('director', {}).get('port', 32479)
         return render_template('director.html', director_port=director_port)
-
-    # Admin
-    @app.route('/admin')
-    @login_required
-    def admin_page():
-        try:
-            bans = admin_svc.get_bans()
-        except Exception:
-            bans = []
-        return render_template('admin.html', bans=bans)
 
     # Server status
     @app.route('/server')

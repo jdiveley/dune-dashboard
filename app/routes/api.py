@@ -471,7 +471,7 @@ def register_api_routes(app, services, settings):
                 return result
 
             all_keys = extract_all_keys(props)[:100]
-            relevant = [k for k in all_keys if any(x in k.lower() for x in ['health', 'damage', 'part', 'module', 'component', 'hit', 'armor', 'slot'])]
+            relevant = [k for k in all_keys if any(x in k.lower() for x in ['health', 'damage', 'part', 'module', 'component', 'hit', 'armor', 'slot', 'fuel', 'gas', 'energy', 'resource'])]
 
             return jsonify({
                 'id': vehicle_id, 'class': vehicle['class'],
