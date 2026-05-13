@@ -529,7 +529,15 @@ $secret = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 32 | ForEac
 
 # Hash the password using Argon2
 Write-Host "  Hashing password with Argon2..." -ForegroundColor Yellow
-$hashResult = python -c "from argon2 import PasswordHasher; ph = PasswordHasher(); print(ph.hash('$AuthPass'.replace('`$','').replace(\"'\",\"\").replace('\"','')))" 2>$null
+$pwScript = @"
+import sys
+from argon2 import PasswordHasher
+ph = PasswordHasher()
+print(ph.hash(sys.argv[1]))
+"@
+$pwScript | Out-File -FilePath "$env:TEMP\hash_pw.py" -Encoding utf8 -Force
+$hashResult = python "$env:TEMP\hash_pw.py" $AuthPass 2>$null
+Remove-Item "$env:TEMP\hash_pw.py" -Force -ErrorAction SilentlyContinue
 if ($hashResult -and $hashResult -match '^\$argon2') {
     $AuthHash = $hashResult.Trim()
     Write-Host "  Password hashed successfully." -ForegroundColor Green

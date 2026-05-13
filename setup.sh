@@ -369,7 +369,15 @@ SECRET=$($PYTHON -c "import secrets; print(secrets.token_hex(32))")
 
 # Hash the password using Argon2
 echo "  Hashing password with Argon2..."
-AUTH_HASH=$($PYTHON -c "from argon2 import PasswordHasher; ph = PasswordHasher(); print(ph.hash('$AUTH_PASS'))" 2>/dev/null)
+PW_SCRIPT=$(mktemp /tmp/hash_pw.XXXXXX.py)
+cat > "$PW_SCRIPT" << 'PYEOF'
+import sys
+from argon2 import PasswordHasher
+ph = PasswordHasher()
+print(ph.hash(sys.argv[1]))
+PYEOF
+AUTH_HASH=$($PYTHON "$PW_SCRIPT" "$AUTH_PASS" 2>/dev/null)
+rm -f "$PW_SCRIPT"
 if [[ "$AUTH_HASH" == \$argon2* ]]; then
     echo "  Password hashed successfully."
 else
