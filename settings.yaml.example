@@ -41,6 +41,15 @@ kubernetes:
   namespace: ""                # Leave empty to auto-detect on first run
   battlegroup_script: "/home/dune/.dune/bin/battlegroup"
 
+# Firewall Security
+# Block external internet access to game server services that have no authentication.
+# These services are internal and should NOT be exposed to the public internet.
+# The dashboard will apply these rules via iptables on the game server VM.
+firewall:
+  block_filebrowser: true      # Block port 18888 (filebrowser - has no auth)
+  block_director: true         # Block port 31820 (director - has no auth)
+  block_postgres: true         # Block port 15432 (PostgreSQL - default creds)
+
 # Cache (seconds)
 cache:
   chat_pod_ttl: 60

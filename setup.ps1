@@ -521,6 +521,44 @@ if ($EnableRemote) {
     $DashHost = "127.0.0.1"
 }
 
+# Firewall security hardening
+Write-Host ""
+Write-Host "[SECURITY] Firewall Hardening" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Your game server has services exposed to the internet without authentication." -ForegroundColor Yellow
+Write-Host "  This is a SECURITY RISK - these services have been targeted by automated attacks." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "  Recommended: Block these ports so only localhost/VPN can reach them:" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  [1] File Browser (port 18888)     - No authentication, exposes server files" -ForegroundColor Cyan
+Write-Host "  [2] Battlegroup Director (port 31820) - No authentication, exposes server API" -ForegroundColor Cyan
+Write-Host "  [3] PostgreSQL (port 15432)       - Default credentials (postgres/postgres)" -ForegroundColor Cyan
+Write-Host "                                      REQUIRES BLOCKING - was exploited by malware" -ForegroundColor Red
+Write-Host ""
+Write-Host "  You can change these anytime from the Server page in the dashboard." -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Block File Browser (18888)? (Y/n)" -ForegroundColor Cyan
+$val = Read-Host "  Block File Browser (18888)? (Y/n)"
+$BlockFileBrowser = -not ($val -eq 'n' -or $val -eq 'N')
+if ($BlockFileBrowser) { Write-Host "  Will block port 18888 (File Browser)" -ForegroundColor Green }
+else { Write-Host "  Skipped - port 18888 will remain open to the internet" -ForegroundColor Yellow }
+
+Write-Host ""
+Write-Host "  Block Battlegroup Director (31820)? (Y/n)" -ForegroundColor Cyan
+$val = Read-Host "  Block Battlegroup Director (31820)? (Y/n)"
+$BlockDirector = -not ($val -eq 'n' -or $val -eq 'N')
+if ($BlockDirector) { Write-Host "  Will block port 31820 (Director)" -ForegroundColor Green }
+else { Write-Host "  Skipped - port 31820 will remain open to the internet" -ForegroundColor Yellow }
+
+Write-Host ""
+Write-Host "  Block PostgreSQL (15432)? (Y/n)" -ForegroundColor Cyan
+Write-Host "  WARNING: This port was exploited by a cryptocurrency miner attack." -ForegroundColor Red
+Write-Host "  Default credentials postgres/postgres are a known target." -ForegroundColor Red
+$val = Read-Host "  Block PostgreSQL (15432)? (Y/n)"
+$BlockPostgres = -not ($val -eq 'n' -or $val -eq 'N')
+if ($BlockPostgres) { Write-Host "  Will block port 15432 (PostgreSQL)" -ForegroundColor Green }
+else { Write-Host "  Skipped - port 15432 will remain open to the internet" -ForegroundColor Yellow }
+
 Write-Host ""
 Write-Host "[5/6] Saving settings..." -ForegroundColor Yellow
 
@@ -587,6 +625,11 @@ director:
 filebrowser:
   port: $FileBrowserPort
 
+firewall:
+  block_filebrowser: $BlockFileBrowser
+  block_director: $BlockDirector
+  block_postgres: $BlockPostgres
+
 cache:
   chat_pod_ttl: 60
   chat_messages_ttl: 10
@@ -644,6 +687,46 @@ if (-not $SshValid) {
     Write-Host "    .\start.ps1" -ForegroundColor Cyan
 } else {
     Write-Host "  SSH connection verified." -ForegroundColor Green
+
+    # Apply firewall rules if requested
+    $portsToBlock = @()
+    if ($BlockFileBrowser) { $portsToBlock += 18888 }
+    if ($BlockDirector) { $portsToBlock += 31820 }
+    if ($BlockPostgres) { $portsToBlock += 15432 }
+
+    if ($portsToBlock.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  Applying firewall rules to block ports: $($portsToBlock -join ', ')..." -ForegroundColor Yellow
+
+        $tmpFwScript = Join-Path $env:TEMP ([System.IO.Path]::GetRandomFileName() + ".sh")
+        $fwContent = @"
+for PORT in $($portsToBlock -join ' '); do
+    if iptables -C INPUT -p tcp --dport `$PORT -s 127.0.0.1 -j ACCEPT 2>/dev/null; then
+        echo "Port `$PORT already blocked"
+    else
+        iptables -I INPUT 1 -p tcp --dport `$PORT -s 127.0.0.1 -j ACCEPT
+        iptables -I INPUT 2 -p tcp --dport `$PORT -j DROP
+        echo "Port `$PORT blocked"
+    fi
+done
+echo "FIREWALL_DONE"
+"@
+        $fwContent | Out-File -FilePath $tmpFwScript -Encoding utf8 -Force
+        $fwOut = ssh -i $FoundKey -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "${ServerUser}@${VmHost}" "sudo bash -s" < $tmpFwScript 2>&1
+        Remove-Item $tmpFwScript -Force -ErrorAction SilentlyContinue
+
+        if ($fwOut -match "FIREWALL_DONE") {
+            Write-Host "  Firewall rules applied successfully!" -ForegroundColor Green
+        } else {
+            Write-Host "  [WARN] Firewall rules may not have applied correctly." -ForegroundColor Yellow
+            if ($fwOut.Length -gt 300) {
+                Write-Host "  Output: $($fwOut.Substring(0, 300))" -ForegroundColor Yellow
+            } else {
+                Write-Host "  Output: $fwOut" -ForegroundColor Yellow
+            }
+        }
+    }
+
     Write-Host ""
     Write-Host "  Start the dashboard with:" -ForegroundColor Yellow
     Write-Host ""

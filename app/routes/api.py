@@ -87,6 +87,74 @@ def register_api_routes(app, services, settings):
         out, err, rc = ssh.run(f'{bg_script} update', timeout=600)
         return jsonify({'success': rc == 0, 'output': out + err if out or err else 'No output'})
 
+    # Firewall management
+    @app.route('/server/firewall')
+    def firewall_status():
+        fw = settings.get('firewall', {})
+        blocked = []
+        available = []
+
+        port_map = {
+            'filebrowser': {'port': 18888, 'name': 'File Browser'},
+            'director': {'port': 31820, 'name': 'Battlegroup Director'},
+            'postgres': {'port': 15432, 'name': 'PostgreSQL'},
+        }
+
+        for key, info in port_map.items():
+            if fw.get(f'block_{key}'):
+                blocked.append(info)
+            else:
+                available.append(info)
+
+        out, err, rc = ssh.run('sudo iptables -L INPUT -n --line-numbers 2>/dev/null | grep -E "dpt:(18888|31820|15432)"', timeout=10)
+        rules = {}
+        for line in out.split('\n'):
+            for port in ['18888', '31820', '15432']:
+                if f'dpt:{port}' in line:
+                    rules[port] = line.strip()
+
+        return jsonify({
+            'success': True,
+            'blocked': blocked,
+            'available': available,
+            'iptables_rules': rules,
+        })
+
+    @app.route('/server/firewall/block', methods=['POST'])
+    @limiter.limit("10 per hour")
+    def firewall_block():
+        port = request.form.get('port', type=int)
+        if port not in (18888, 31820, 15432):
+            return jsonify({'success': False, 'output': 'Invalid port'})
+
+        cmd = f'sudo iptables -I INPUT 1 -p tcp --dport {port} -s 127.0.0.1 -j ACCEPT && sudo iptables -I INPUT 2 -p tcp --dport {port} -j DROP'
+        out, err, rc = ssh.run(cmd, timeout=15)
+        if rc != 0 and 'already exists' not in err and 'No such file' not in err:
+            return jsonify({'success': False, 'output': err})
+
+        return jsonify({'success': True, 'output': f'Port {port} blocked (localhost allowed)'})
+
+    @app.route('/server/firewall/unblock', methods=['POST'])
+    @limiter.limit("10 per hour")
+    def firewall_unblock():
+        port = request.form.get('port', type=int)
+        if port not in (18888, 31820, 15432):
+            return jsonify({'success': False, 'output': 'Invalid port'})
+
+        cmds = [
+            f'sudo iptables -D INPUT -p tcp --dport {port} -j DROP',
+            f'sudo iptables -D INPUT -p tcp --dport {port} -s 127.0.0.1 -j ACCEPT',
+        ]
+        all_ok = True
+        results = []
+        for cmd in cmds:
+            out, err, rc = ssh.run(cmd, timeout=10)
+            results.append(err.strip() if err else 'ok')
+            if rc != 0 and 'No chain' not in err and 'not found' not in err:
+                all_ok = False
+
+        return jsonify({'success': all_ok, 'output': ' / '.join(r for r in results if r)})
+
     # Chat API
     @app.route('/api/chat_logs')
     def api_chat_logs():

@@ -44,6 +44,11 @@ DEFAULTS = {
     'filebrowser': {
         'port': 18888,
     },
+    'firewall': {
+        'block_filebrowser': True,
+        'block_director': True,
+        'block_postgres': True,
+    },
     'cache': {
         'chat_pod_ttl': 60,
         'chat_messages_ttl': 10,

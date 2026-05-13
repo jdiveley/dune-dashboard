@@ -213,6 +213,24 @@
     </div>
 </div>
 
+<div class="card">
+    <div class="card-header">
+        <span>Firewall Security</span>
+        <span id="fw-status-indicator" style="font-size:12px;color:var(--text-muted);">Loading...</span>
+    </div>
+    <div class="card-body">
+        <div style="margin-bottom:12px;padding:12px;background:#1a1a2e;border-radius:6px;font-size:13px;line-height:1.6;">
+            <strong style="color:#e74c3c;">Security Recommendation:</strong> The following services are exposed to the internet without authentication.
+            Block them so only localhost (the dashboard via SSH tunnel) can reach them.
+        </div>
+        <div id="fw-ports-list" style="margin-bottom:16px;"></div>
+        <button id="fw-btn-refresh" style="padding:8px 20px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Refresh Status</button>
+        <div id="fw-action-output" style="margin-top:12px;display:none;">
+            <pre id="fw-action-text" style="background:#1a1a2e;color:#e0d5c7;padding:12px;border-radius:8px;font-size:12px;overflow-x:auto;white-space:pre-wrap;"></pre>
+        </div>
+    </div>
+</div>
+
 {% endif %}
 {% endblock %}
 
@@ -363,5 +381,80 @@ document.getElementById('bg-btn-stop')?.addEventListener('click', function() { b
 document.getElementById('bg-btn-restart')?.addEventListener('click', function() { bgAction('restart', this); });
 document.getElementById('bg-btn-update')?.addEventListener('click', function() { bgAction('update', this); });
 document.getElementById('bg-btn-refresh')?.addEventListener('click', bgRefreshStatus);
+
+// Firewall Security
+async function loadFwStatus() {
+    const indicator = document.getElementById('fw-status-indicator');
+    const list = document.getElementById('fw-ports-list');
+    const btn = document.getElementById('fw-btn-refresh');
+    btn.disabled = true;
+    btn.textContent = 'Loading...';
+    indicator.textContent = 'Checking...';
+
+    try {
+        const resp = await fetch('/server/firewall');
+        const data = await resp.json();
+        if (!data.success) {
+            indicator.textContent = 'SSH unavailable';
+            indicator.style.color = 'var(--danger)';
+            list.innerHTML = '<p style="color:var(--text-light);font-size:14px;">SSH tunnel is required for firewall control.</p>';
+            btn.disabled = false;
+            btn.textContent = 'Refresh Status';
+            return;
+        }
+
+        const allPorts = [...(data.blocked || []), ...(data.available || [])];
+        let html = '<table style="width:100%;font-size:13px;"><thead><tr><th>Service</th><th>Port</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+        for (const p of allPorts) {
+            const isBlocked = (data.blocked || []).some(b => b.port === p.port);
+            const rules = Object.values(data.iptables_rules || {}).filter(r => r.includes('dpt:' + p.port));
+            const statusText = isBlocked ? '<span style="color:#4ade80;font-weight:600;">Blocked</span>' : '<span style="color:#e74c3c;font-weight:600;">Open</span>';
+            const actionBtn = isBlocked
+                ? `<button class="fw-btn" data-port="${p.port}" data-action="unblock" style="padding:4px 12px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Unblock</button>`
+                : `<button class="fw-btn" data-port="${p.port}" data-action="block" style="padding:4px 12px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Block</button>`;
+            html += `<tr><td style="padding:6px 0;">${p.name}</td><td style="font-family:monospace;">${p.port}</td><td>${statusText}</td><td>${actionBtn}</td></tr>`;
+        }
+        html += '</tbody></table>';
+        list.innerHTML = html;
+        indicator.textContent = 'Status loaded';
+        indicator.style.color = 'var(--success)';
+
+        document.querySelectorAll('.fw-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const port = this.dataset.port;
+                const action = this.dataset.action;
+                if (!confirm((action === 'block' ? 'Block' : 'Unblock') + ' port ' + port + ' from external access?')) return;
+                this.disabled = true;
+                this.textContent = 'Working...';
+
+                const output = document.getElementById('fw-action-output');
+                const outputText = document.getElementById('fw-action-text');
+                output.style.display = 'block';
+                outputText.textContent = (action === 'block' ? 'Blocking' : 'Unblocking') + ' port ' + port + '...';
+
+                try {
+                    const form = new FormData();
+                    form.append('port', port);
+                    const resp = await fetch('/server/firewall/' + action, { method: 'POST', body: form });
+                    const result = await resp.json();
+                    outputText.textContent = result.output || (result.success ? 'Done' : 'Failed');
+                    await loadFwStatus();
+                } catch (e) {
+                    outputText.textContent = 'Error: ' + e.message;
+                }
+            });
+        });
+    } catch (e) {
+        indicator.textContent = 'Error loading status';
+        indicator.style.color = 'var(--danger)';
+        list.innerHTML = '<p style="color:var(--danger);">Error: ' + e.message + '</p>';
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Refresh Status';
+}
+
+document.getElementById('fw-btn-refresh')?.addEventListener('click', loadFwStatus);
+loadFwStatus();
 </script>
 {% endblock %}
