@@ -177,9 +177,9 @@ if ($pfCheck) {
 
 $RemotePort = 15432
 $remoteCmd = 'nohup sudo kubectl port-forward -n ' + $Namespace + ' svc/' + $DBService + ' ' + $LocalPort + ':' + $RemotePort + ' > /tmp/pf.log 2>&1 &'
-$remoteCmdEscaped = $remoteCmd -replace '&', '`&'
-$pfRemote = 'ssh -i "' + $SSHKey + '" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 ' + $SSHUser + '@' + $ServerHost + ' "' + $remoteCmdEscaped + '"'
-cmd /c $pfRemote
+$pfRemote = 'ssh -i "' + $SSHKey + '" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 ' + $SSHUser + '@' + $ServerHost + ' "' + $remoteCmd + '"'
+$pfRemote | Out-File -FilePath "$env:TEMP\ssh_pf_db.bat" -Encoding ascii
+cmd /c "$env:TEMP\ssh_pf_db.bat"
 
 $bgdSvc = "${Namespace}-bgd-svc"
 $pfCheckBgd = ssh -i $SSHKey -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 ${SSHUser}@${ServerHost} "sudo kubectl get svc -n ${Namespace} -o name" 2>$null
@@ -190,9 +190,9 @@ if ($pfCheckBgd) {
 
 $directorRemotePort = 11717
 $directorCmd = 'nohup sudo kubectl port-forward -n ' + $Namespace + ' svc/' + $bgdSvc + ' ' + $DirectorPort + ':' + $directorRemotePort + ' > /tmp/director_pf.log 2>&1 &'
-$directorCmdEscaped = $directorCmd -replace '&', '`&'
-$directorPf = 'ssh -i "' + $SSHKey + '" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 ' + $SSHUser + '@' + $ServerHost + ' "' + $directorCmdEscaped + '"'
-cmd /c $directorPf
+$directorPf = 'ssh -i "' + $SSHKey + '" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 ' + $SSHUser + '@' + $ServerHost + ' "' + $directorCmd + '"'
+$directorPf | Out-File -FilePath "$env:TEMP\ssh_pf_director.bat" -Encoding ascii
+cmd /c "$env:TEMP\ssh_pf_director.bat"
 
 Start-Sleep -Seconds 3
 
