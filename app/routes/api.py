@@ -28,6 +28,7 @@ def register_api_routes(app, services, settings):
 
     # Server actions
     @app.route('/server/action', methods=['POST'])
+    @login_required
     @limiter.limit("20 per hour")
     def server_action():
         deployment = request.form.get('deployment', '')
@@ -50,6 +51,7 @@ def register_api_routes(app, services, settings):
         return jsonify({'success': rc == 0, 'output': out + '\n' + err})
 
     @app.route('/server/pods')
+    @login_required
     def server_pods():
         out, err, rc = k8s.run('get pods -o wide')
         if rc != 0:
@@ -57,6 +59,7 @@ def register_api_routes(app, services, settings):
         return jsonify({'success': True, 'output': out})
 
     @app.route('/server/metrics')
+    @login_required
     def server_metrics():
         metrics = k8s.get_node_metrics()
         if metrics:
@@ -65,12 +68,14 @@ def register_api_routes(app, services, settings):
 
     # Battlegroup
     @app.route('/server/battlegroup/status')
+    @login_required
     def battlegroup_status():
         bg_script = settings['kubernetes']['battlegroup_script']
         out, err, rc = ssh.run(f'{bg_script} status', timeout=30)
         return jsonify({'success': rc == 0, 'output': out + err if out or err else 'No output'})
 
     @app.route('/server/battlegroup/action', methods=['POST'])
+    @login_required
     @limiter.limit("10 per hour")
     def battlegroup_action():
         action = request.form.get('action', '')
@@ -81,6 +86,7 @@ def register_api_routes(app, services, settings):
         return jsonify({'success': rc == 0, 'output': out + err if out or err else 'No output'})
 
     @app.route('/server/battlegroup/update', methods=['POST'])
+    @login_required
     @limiter.limit("5 per hour")
     def battlegroup_update():
         bg_script = settings['kubernetes']['battlegroup_script']
@@ -89,6 +95,7 @@ def register_api_routes(app, services, settings):
 
     # Firewall management
     @app.route('/server/firewall')
+    @login_required
     def firewall_status():
         port_map = {
             'filebrowser': {'port': 18888, 'name': 'File Browser'},
@@ -123,6 +130,7 @@ def register_api_routes(app, services, settings):
         })
 
     @app.route('/server/firewall/block', methods=['POST'])
+    @login_required
     @limiter.limit("10 per hour")
     def firewall_block():
         port = request.form.get('port', type=int)
@@ -158,6 +166,7 @@ def register_api_routes(app, services, settings):
         return jsonify({'success': True, 'output': f'Port {port} blocked (localhost allowed)'})
 
     @app.route('/server/firewall/unblock', methods=['POST'])
+    @login_required
     @limiter.limit("10 per hour")
     def firewall_unblock():
         port = request.form.get('port', type=int)
@@ -195,6 +204,7 @@ def register_api_routes(app, services, settings):
 
     # Chat API
     @app.route('/api/chat_logs')
+    @login_required
     def api_chat_logs():
         try:
             chat_svc.ensure_history_table()
@@ -223,6 +233,7 @@ def register_api_routes(app, services, settings):
 
     # Player IP management
     @app.route('/api/set_player_ip', methods=['POST'])
+    @login_required
     def api_set_player_ip():
         try:
             player_id = request.form.get('player_id', type=int)
@@ -239,6 +250,7 @@ def register_api_routes(app, services, settings):
             return jsonify({'success': False, 'error': str(e)})
 
     @app.route('/api/detect_player_ips', methods=['POST'])
+    @login_required
     def api_detect_player_ips():
         try:
             success, message = admin_svc.detect_player_ips(settings['kubernetes']['namespace'])
@@ -248,6 +260,7 @@ def register_api_routes(app, services, settings):
 
     # Ban management
     @app.route('/api/ban_player', methods=['POST'])
+    @login_required
     @limiter.limit("20 per hour")
     def api_ban_player():
         try:
@@ -265,6 +278,7 @@ def register_api_routes(app, services, settings):
             return jsonify({'success': False, 'error': str(e)})
 
     @app.route('/api/get_player_ban', methods=['POST'])
+    @login_required
     def api_get_player_ban():
         try:
             player_id = request.form.get('player_id', type=int)
@@ -286,6 +300,7 @@ def register_api_routes(app, services, settings):
             return jsonify({'success': False, 'error': str(e)})
 
     @app.route('/api/get_player_history', methods=['POST'])
+    @login_required
     def api_get_player_history():
         try:
             player_id = request.form.get('player_id', type=int)
@@ -308,6 +323,7 @@ def register_api_routes(app, services, settings):
             return jsonify({'success': False, 'error': str(e)})
 
     @app.route('/api/unban_player', methods=['POST'])
+    @login_required
     @limiter.limit("20 per hour")
     def api_unban_player():
         try:
@@ -321,6 +337,7 @@ def register_api_routes(app, services, settings):
             return jsonify({'success': False, 'error': str(e)})
 
     @app.route('/api/emergency_unban', methods=['POST'])
+    @login_required
     def api_emergency_unban():
         try:
             ip = request.form.get('ip', '').strip()
@@ -332,6 +349,7 @@ def register_api_routes(app, services, settings):
             return jsonify({'success': False, 'error': str(e)})
 
     @app.route('/api/kick_player', methods=['POST'])
+    @login_required
     @limiter.limit("30 per hour")
     def api_kick_player():
         try:
@@ -346,6 +364,7 @@ def register_api_routes(app, services, settings):
 
     # Vitals editing
     @app.route('/api/edit_vitals', methods=['POST'])
+    @login_required
     @limiter.limit("30 per hour")
     def api_edit_vitals():
         try:
@@ -489,6 +508,7 @@ def register_api_routes(app, services, settings):
 
     # Maintenance
     @app.route('/api/maintenance/create_indexes', methods=['POST'])
+    @login_required
     def api_create_indexes():
         try:
             success, created, error = admin_svc.create_indexes()
@@ -500,6 +520,7 @@ def register_api_routes(app, services, settings):
 
     # Delete vehicle
     @app.route('/api/vehicles/<int:vehicle_id>', methods=['DELETE'])
+    @login_required
     def delete_vehicle(vehicle_id):
         success, message = vehicle_svc.delete_vehicle(vehicle_id)
         if success:
@@ -508,6 +529,7 @@ def register_api_routes(app, services, settings):
 
     # Delete building
     @app.route('/api/buildings/<int:building_id>', methods=['DELETE'])
+    @login_required
     def delete_building(building_id):
         conn = db.get_connection()
         if not conn:
@@ -755,6 +777,7 @@ def register_api_routes(app, services, settings):
         return k8s.ssh.run(full_cmd, timeout=timeout)
 
     @app.route('/api/files/list', methods=['POST'])
+    @login_required
     def api_files_list():
         path = request.form.get('path', '/srv')
         if not _validate_fb_path(path):
@@ -783,6 +806,7 @@ def register_api_routes(app, services, settings):
         return jsonify({'success': True, 'files': files})
 
     @app.route('/api/files/view')
+    @login_required
     def api_files_view():
         path = request.args.get('path', '')
         if not path:
@@ -795,6 +819,7 @@ def register_api_routes(app, services, settings):
         return jsonify({'success': True, 'content': out, 'path': path})
 
     @app.route('/api/files/save', methods=['POST'])
+    @login_required
     @limiter.limit("50 per hour")
     def api_files_save():
         path = request.form.get('path', '')
@@ -877,6 +902,7 @@ def register_api_routes(app, services, settings):
 
     # Director API proxy
     @app.route('/api/director/battlegroup')
+    @login_required
     def director_battlegroup():
         try:
             logger.info(f"Director request: {director_base}/v0/battlegroup")
@@ -887,6 +913,7 @@ def register_api_routes(app, services, settings):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/director/update_config', methods=['POST'])
+    @login_required
     def director_update_config():
         try:
             config = request.get_json()
@@ -931,6 +958,7 @@ def register_api_routes(app, services, settings):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/director/clear_config', methods=['POST'])
+    @login_required
     def director_clear_config():
         try:
             map_name = request.get_data(as_text=True).strip()
@@ -942,6 +970,7 @@ def register_api_routes(app, services, settings):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/director/character_transfer', methods=['GET'])
+    @login_required
     def director_character_transfer_get():
         try:
             data = _director_request('/v0/BattlegroupFetchCharacterTransferRules')
@@ -950,6 +979,7 @@ def register_api_routes(app, services, settings):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/director/character_transfer', methods=['POST'])
+    @login_required
     def director_character_transfer_update():
         try:
             config = request.get_json()
@@ -968,6 +998,7 @@ def register_api_routes(app, services, settings):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/director/character_transfer_clear', methods=['POST'])
+    @login_required
     def director_character_transfer_clear():
         try:
             result = _director_request('/v0/BattlegroupClearCharacterTransferOverrides', method='POST', timeout=30)
@@ -980,6 +1011,7 @@ def register_api_routes(app, services, settings):
 
     # Update management
     @app.route('/api/update/status')
+    @login_required
     def api_update_status():
         updater = services.get('updater')
         if not updater:
@@ -990,6 +1022,7 @@ def register_api_routes(app, services, settings):
         })
 
     @app.route('/api/update/apply', methods=['POST'])
+    @login_required
     def api_update_apply():
         updater = services.get('updater')
         if not updater:
@@ -998,6 +1031,7 @@ def register_api_routes(app, services, settings):
         return jsonify({'success': success, 'message': message})
 
     @app.route('/api/update/test', methods=['POST'])
+    @login_required
     def api_update_test():
         """Force show update banner for testing."""
         updater = services.get('updater')
@@ -1007,6 +1041,7 @@ def register_api_routes(app, services, settings):
         return jsonify({'success': False, 'error': 'Updater not available'})
 
     @app.route('/api/update/check', methods=['POST'])
+    @login_required
     def api_update_check():
         """Force a fresh check against GitHub."""
         updater = services.get('updater')

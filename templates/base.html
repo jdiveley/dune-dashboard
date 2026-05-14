@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}Dune Awakening Server Dashboard{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -100,6 +101,25 @@
     }
     setInterval(checkForUpdate, 60000);
     checkForUpdate();
+
+    // CSRF: Attach token to all non-GET fetch requests
+    (function() {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+        if (!csrfToken) return;
+        const origFetch = window.fetch;
+        window.fetch = function() {
+            let [resource, config] = arguments;
+            if (!config) config = {};
+            if (!config.headers) config.headers = {};
+            const method = (config.method || 'GET').toUpperCase();
+            if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+                if (typeof config.headers === 'object') {
+                    config.headers['X-CSRFToken'] = csrfToken;
+                }
+            }
+            return origFetch(resource, config);
+        };
+    })();
     </script>
     <style>
     .update-banner { background: var(--bg-hover); border-bottom: 2px solid var(--accent); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--text); }

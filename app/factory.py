@@ -10,6 +10,7 @@ from flask_socketio import SocketIO
 from flask_talisman import Talisman
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 
 from app.config import load_settings
 from app.services.database import DatabaseService
@@ -42,6 +43,9 @@ def create_app(settings_path=None):
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['SESSION_COOKIE_SECURE'] = True  # Always enforce secure cookies
+
+    # Initialize CSRF protection
+    csrf = CSRFProtect(app)
 
     ssl_enabled = bool(
         settings['dashboard'].get('ssl_cert')
