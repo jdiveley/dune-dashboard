@@ -41,6 +41,14 @@ kubernetes:
   namespace: ""                # Leave empty to auto-detect on first run
   battlegroup_script: "/home/dune/.dune/bin/battlegroup"
 
+# Director (Battlegroup Director API)
+director:
+  port: 32479                  # Director NodePort service port
+
+# File Browser
+filebrowser:
+  port: 18888                  # File Browser service port
+
 # Firewall Security
 # Block external internet access to game server services that have no authentication.
 # These services are internal and should NOT be exposed to the public internet.
