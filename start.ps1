@@ -176,7 +176,7 @@ if ($pfCheck) {
 }
 
 $RemotePort = 15432
-$remoteCmd = 'nohup kubectl port-forward -n ' + $Namespace + ' svc/' + $DBService + ' ' + $LocalPort + ':' + $RemotePort + ' > /tmp/pf.log 2>&1 &'
+$remoteCmd = 'nohup sudo kubectl port-forward -n ' + $Namespace + ' svc/' + $DBService + ' ' + $LocalPort + ':' + $RemotePort + ' > /tmp/pf.log 2>&1 &'
 $remoteCmdEscaped = $remoteCmd -replace '&', '`&'
 $pfRemote = 'ssh -i "' + $SSHKey + '" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 ' + $SSHUser + '@' + $ServerHost + ' "' + $remoteCmdEscaped + '"'
 cmd /c $pfRemote
