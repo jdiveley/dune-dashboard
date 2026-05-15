@@ -260,8 +260,22 @@ if ($DomainName) {
 # Try SSH with the confirmed VM IP to auto-detect namespace
 if ($FoundKey -and $VmHost -ne "YOUR_SERVER_IP") {
     Write-Host "  Testing SSH connection..." -ForegroundColor Yellow
-    $testOut = cmd /c "ssh -i `"$FoundKey`" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -o BatchMode=yes dune@$VmHost echo ok" 2>$null
-    if ($testOut -match "ok") {
+    Write-Host "  (Fresh VMs may need time to initialize SSH keys — will retry up to 60s)" -ForegroundColor DarkGray
+    Write-Host ""
+
+    $sshOk = $false
+    for ($i = 0; $i -lt 12; $i++) {
+        $testOut = cmd /c "ssh -i `"$FoundKey`" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -o BatchMode=yes dune@$VmHost echo ok" 2>&1
+        $testExit = $LASTEXITCODE
+        if ($testOut -match "ok" -and $testExit -eq 0) {
+            $sshOk = $true
+            break
+        }
+        Write-Host "  Attempt $($i+1)/12 — SSH not ready yet, waiting 5s..." -ForegroundColor DarkGray
+        Start-Sleep -Seconds 5
+    }
+
+    if ($sshOk) {
         Write-Host "  SSH connection OK" -ForegroundColor Green
         $nsOut = cmd /c "ssh -i `"$FoundKey`" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes dune@$VmHost sudo kubectl get namespaces -o name" 2>$null
         if ($nsOut) {
@@ -275,7 +289,22 @@ if ($FoundKey -and $VmHost -ne "YOUR_SERVER_IP") {
             }
         }
     } else {
-        Write-Host "  [WARN] SSH failed for $VmHost. You may need to enter the namespace manually." -ForegroundColor Yellow
+        Write-Host "  SSH connection failed after 60s of retries" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "  This is normal on a fresh VM that hasn't finished initializing." -ForegroundColor Cyan
+        Write-Host "  You can still continue setup — just enter the namespace manually below." -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "  Once the VM is ready, copy your public key to enable SSH:" -ForegroundColor Cyan
+        Write-Host ""
+        $pubKeyContent = $null
+        try { $pubKeyContent = Get-Content "$FoundKey.pub" -ErrorAction SilentlyContinue } catch {}
+        if ($pubKeyContent) {
+            Write-Host "    ssh dune@$VmHost 'mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo `"$pubKeyContent`" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'" -ForegroundColor DarkGray
+        } else {
+            Write-Host "    ssh dune@$VmHost 'mkdir -p ~/.ssh && chmod 700 ~/.ssh'" -ForegroundColor DarkGray
+            Write-Host "    Then paste your public key into ~/.ssh/authorized_keys" -ForegroundColor DarkGray
+        }
+        Write-Host ""
     }
 }
 
