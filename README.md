@@ -6,6 +6,22 @@ A comprehensive web-based management dashboard for Dune: Awakening private serve
 >
 > **Branch Status**: The `main` branch is the current stable development version. The `nightly` branch is the bleeding-edge development branch.
 
+## Branching Strategy
+
+This repo follows a git-flow inspired strategy. Here's the breakdown:
+
+- **main** - Current beta release. It's stable enough to use, but things still break occasionally. I'm working toward a proper stable release, but we're not there yet. Don't use main as a reference for "production-ready" code - it's more "production-adjacent."
+
+- **nightly** - The cutting edge. Updated automatically from main with the latest changes. Might have shiny new features, might have shiny new bugs. Generally works but don't be surprised if something catches fire.
+
+- **experimental** - Where ideas go to become features or crash spectacularly. This is where new features are tested, questionable UI decisions are made, and code is written that might make future-me weep. Expect bugs. Expect weirdness. Expect things to break in creative new ways.
+
+> "This seemed like a great idea at 3am" - every experimental commit ever
+
+**Workflow:** Features → experimental → testing → nightly → main (eventually)
+
+If you're testing this project, grab builds from nightly for the latest features, or main for something more stable. Experimental is where I break things on purpose to see what sticks.
+
 ## Quick Start
 
 ### Windows
