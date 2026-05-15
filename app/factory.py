@@ -90,8 +90,10 @@ def create_app(settings_path=None):
 
     _setup_logging(settings)
 
+    db_host = settings['database']['host']
+
     db_config = {
-        'host': settings['database']['host'],
+        'host': db_host,
         'port': settings['database']['port'],
         'user': settings['database']['user'],
         'password': settings['database']['password'],
@@ -115,7 +117,7 @@ def create_app(settings_path=None):
         logging.warning(f"Could not create indexes: {e}")
 
     ssh_service = SSHService(
-        host=settings['server']['host'],
+        host=settings['server'].get('local_ip', settings['server']['host']),
         user=settings['server']['user'],
         ssh_key=settings['server'].get('ssh_key')
     )
@@ -133,7 +135,7 @@ def create_app(settings_path=None):
     admin_svc = AdminService(db_service, ssh_service)
     updater_svc = UpdateService(base_dir)
     director_svc = DirectorService(
-        host='127.0.0.1',
+        host=settings['server'].get('local_ip', '127.0.0.1'),
         node_port=settings.get('director', {}).get('port', 32479),
         k8s_service=k8s_service,
         ssh_service=ssh_service,

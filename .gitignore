@@ -61,6 +61,7 @@ logs/
 # Database
 *.db
 *.sqlite3
+instance/
 
 # Temporary files
 *.tmp
@@ -80,6 +81,10 @@ coverage.xml
 temp_*.py
 temp_*.ps1
 temp_*.sh
+check_*.py
+fix_*.py
+parse_*.ps1
+find_*.py
 
 # AI-generated analysis docs
 AI_DOCS/
