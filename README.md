@@ -21,11 +21,11 @@ If you're testing this project, grab builds from nightly for the latest features
 ## Quick Start
 
 ### Windows
-1. Double-click `setup.bat`
-2. Follow the prompts
-3. Double-click `start.bat` to launch
+1. Double-click `launcher.ps1` (or run `.\launcher.ps1` in PowerShell)
+2. Select option **2** to run Setup on first use
+3. Select option **1** to Start Dashboard
 
-> **Tip**: Ensure your SSH key is in `internal-scripts/ssh/sshKey` before running setup.
+> **Tip**: The launcher automatically finds your SSH key from the Dune Awakening server installation at `%LOCALAPPDATA%\DuneAwakeningServer\sshKey`.
 
 ## Features
 
@@ -63,36 +63,52 @@ This project is **Source Available** under the [Dune Dashboard Source License (D
 
 ### Windows
 
-1. **Run Setup**
-   ```powershell
-   .\setup.ps1
-   ```
-   This will install dependencies, configure your SSH key, and generate `settings.yaml`.
+1. **Run the Launcher**
+    ```powershell
+    .\launcher.ps1
+    ```
 
-   During setup you'll be prompted for:
-   - **VM External IP** — the IP you SSH into (e.g., `65.21.198.100`)
-   - **Host External IP** — the public IP for SSL certificate SANs (e.g., `65.21.198.107`)
-   - **Let's Encrypt** — optionally set up a publicly trusted SSL cert with auto-renewal via certbot
-   - **Firewall rules** — only prompted if no `DuneDashboard` rule exists yet
+2. **Choose an option from the menu:**
+    - **[1] Start Dashboard** — Launch the dashboard web interface
+    - **[2] Run Setup** — Configure the dashboard for the first time (or reconfigure)
+    - **[3] Run Diagnostics** — Check your system for common issues
+    - **[4] Install CA Certificate** — Install the local CA into Windows Trusted Root store (removes browser SSL warnings)
+    - **[5] Clean & Reinstall CA Certificate** — Remove old CA certificates and install a fresh one
+    - **[Q] Quit** — Exit the launcher
 
-2. **Start Dashboard**
-   ```powershell
-   .\start.ps1
-   ```
-   This starts the SSH tunnel, database port-forward, and launches the dashboard.
+3. **First-time Setup** (option 2)
+
+    The setup script will:
+    - Install Python dependencies
+    - Find your SSH key (automatically detects the Dune Awakening server key)
+    - Auto-detect your VM IP from Hyper-V or SSH history
+    - Generate SSL certificates (local CA or Let's Encrypt)
+    - Configure firewall rules and security hardening
+
+    During setup you'll be prompted for:
+    - **VM External IP** — the IP you SSH into (e.g., `65.21.198.100`)
+    - **Host External IP** — the public IP for SSL certificate SANs (e.g., `65.21.198.107`)
+    - **Let's Encrypt** — optionally set up a publicly trusted SSL cert with auto-renewal via certbot
+    - **Firewall rules** — only prompted if no `DuneDashboard` rule exists yet
+
+    > **Note**: Setup will retry SSH up to 12 times (60 seconds) to accommodate fresh VM boot times. If SSH isn't ready yet, you can still continue and enter your Kubernetes namespace manually.
+
+4. **Start Dashboard** (option 1)
+
+    The launcher will:
+    - Establish an SSH tunnel to your game server
+    - Set up database and Director port-forwards via kubectl
+    - Scale up the BGD deployment if needed
+    - Launch the dashboard web interface
 
 ### Linux / macOS
 
-1. **Run Setup**
-   ```bash
-   chmod +x setup.sh start.sh
-   ./setup.sh
-   ```
-
-2. **Start Dashboard**
-   ```bash
-   ./start.sh
-   ```
+1. **Start Dashboard**
+    ```bash
+    chmod +x start.sh
+    ./start.sh
+    ```
+    The launcher will prompt you to run setup if `settings.yaml` is missing.
 
 ## Configuration
 
