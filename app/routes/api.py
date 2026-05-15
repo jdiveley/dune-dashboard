@@ -302,7 +302,11 @@ def register_api_routes(app, services, settings):
                     'is_admin': row.get('is_admin', False),
                 })
 
-            return jsonify({'success': True, 'messages': messages, 'count': len(messages)})
+            note = None
+            if not messages:
+                note = "Chat messages are not available in this server version. The text-router pod does not expose chat logs via kubectl."
+
+            return jsonify({'success': True, 'messages': messages, 'count': len(messages), 'note': note})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
 
