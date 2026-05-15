@@ -17,6 +17,8 @@ except ImportError:
 from flask import request, session
 from flask_socketio import emit
 
+from app.utils.ssh_key import resolve_ssh_key
+
 logger = logging.getLogger(__name__)
 
 shell_processes = {}
@@ -155,25 +157,7 @@ def register_websocket_handlers(socketio, settings):
 
 
 def _find_ssh_key(settings):
-    key = settings['server'].get('ssh_key')
-    if key and os.path.exists(key):
-        return key
-
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    temp_dir = os.environ.get('TEMP') or os.environ.get('TMPDIR') or ('/tmp' if os.name != 'nt' else 'C:\\Temp')
-    local_appdata = os.environ.get('LOCALAPPDATA', '')
-    potential_paths = [
-        os.path.join(temp_dir, 'dune-tunnel-key'),
-        os.path.join(temp_dir, 'dune-awakening-server-sshKey'),
-        os.path.join(base_dir, 'internal-scripts', 'ssh', 'sshKey'),
-        os.path.join(os.path.dirname(base_dir), 'internal-scripts', 'ssh', 'sshKey'),
-    ]
-    if local_appdata:
-        potential_paths.insert(2, os.path.join(local_appdata, 'DuneAwakeningServer', 'sshKey'))
-    for p in potential_paths:
-        if os.path.exists(p):
-            return p
-    return None
+    return resolve_ssh_key(settings['server'].get('ssh_key'))
 
 
 def _run_ssh_check(host, user, key, command, timeout=10):

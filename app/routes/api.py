@@ -866,123 +866,37 @@ def register_api_routes(app, services, settings):
             return jsonify({'success': False, 'error': err or 'Failed to save file'})
         return jsonify({'success': True})
 
+    director_svc = services.get('director')
     director_port = settings.get('director', {}).get('port', 32479)
-    director_node_port = settings.get('director', {}).get('node_port', 30822)
-    director_base = f"http://{settings['server']['host']}:{director_node_port}"
-    k8s_ns = settings['kubernetes']['namespace']
-    cm_name = f"{k8s_ns}-bgd-conf-cm"
-
-    def _director_request(path, method='GET', data=None, timeout=15, raw_data=False):
-        """Execute HTTP request to director service via NodePort."""
-        import urllib.request
-        url = f"{director_base}{path}"
-        if method == 'GET':
-            req = urllib.request.Request(url)
-        else:
-            if raw_data and isinstance(data, str):
-                body = data.encode()
-            elif data is not None:
-                body = json.dumps(data).encode()
-            else:
-                body = None
-            req = urllib.request.Request(url, data=body, headers={'Content-Type': 'application/json'}, method=method)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.read().decode()
-
-    def _patch_configmap(new_ini_content):
-        """Patch the BGD ConfigMap with new director.ini content via base64 pipe."""
-        import base64
-        cm_out, cm_err, cm_rc = k8s.run(f'get configmap {cm_name} -o json')
-        if cm_rc != 0 or not cm_out:
-            logger.warning(f"Could not get ConfigMap: {cm_err}")
-            return False
-        cm = json.loads(cm_out)
-        cm['data']['director.ini'] = new_ini_content
-        cm_json = json.dumps(cm)
-        cm_b64 = base64.b64encode(cm_json.encode()).decode()
-        patch_cmd = f'echo {cm_b64} | base64 -d | sudo kubectl apply -f - -n {k8s_ns}'
-        out, err, rc = ssh.run(patch_cmd, timeout=15)
-        if rc != 0:
-            logger.warning(f"ConfigMap patch failed: {err}")
-            return False
-        return True
-
-    def _update_ini_section(map_name, key_values, remove_section=False):
-        """Read ConfigMap INI, modify section, write back."""
-        import configparser
-        import io
-        cm_out, _, cm_rc = k8s.run(f'get configmap {cm_name} -o json')
-        if cm_rc != 0 or not cm_out:
-            return False
-        cm = json.loads(cm_out)
-        ini_content = cm['data'].get('director.ini', '')
-        cfg = configparser.ConfigParser()
-        cfg.read_string(ini_content)
-        if remove_section:
-            if cfg.has_section(map_name):
-                cfg.remove_section(map_name)
-        else:
-            if not cfg.has_section(map_name):
-                cfg.add_section(map_name)
-            for key, value in key_values.items():
-                if value is not None:
-                    cfg.set(map_name, key, str(value))
-        buf = io.StringIO()
-        cfg.write(buf)
-        return _patch_configmap(buf.getvalue())
 
     # Director API proxy
     @app.route('/api/director/battlegroup')
     @auth_req
     def director_battlegroup():
         try:
-            logger.info(f"Director request: {director_base}/v0/battlegroup")
-            data = _director_request('/v0/battlegroup')
+            if not director_svc:
+                return jsonify({'success': False, 'error': 'Director service not available'}), 500
+            logger.info("Director request: %s/v0/battlegroup", director_svc.base_url)
+            data = director_svc.get_battlegroup()
             return data, 200, {'Content-Type': 'application/json'}
         except Exception as e:
-            logger.error(f"Director battlegroup error: {e}")
+            logger.error("Director battlegroup error: %s", e)
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/director/update_config', methods=['POST'])
     @auth_req
     def director_update_config():
         try:
+            if not director_svc:
+                return jsonify({'success': False, 'error': 'Director service not available'}), 500
             config = request.get_json()
             map_name = config.get('MapName', '')
-            result = _director_request('/v0/BattlegroupUpdateServerGroupConfig', method='POST', data=config, timeout=30)
+            result = director_svc.update_server_config(config)
 
             if map_name:
-                kv = {}
-                if 'DimensionServerGroupConfig' in config:
-                    dcfg = config['DimensionServerGroupConfig']
-                    if dcfg.get('playerHardCap') is not None:
-                        kv['PlayerHardCap'] = dcfg['playerHardCap']
-                    if dcfg.get('minServers') is not None:
-                        kv['MinServers'] = dcfg['minServers']
-                    if dcfg.get('numExtraServers') is not None:
-                        kv['NumExtraServers'] = dcfg['numExtraServers']
-                    if 'enableAutomaticInstanceScaling' in dcfg:
-                        kv['EnableAutomaticInstanceScaling'] = str(dcfg['enableAutomaticInstanceScaling'])
-                    if dcfg.get('instanceScalingThrottlingSeconds') is not None:
-                        kv['InstanceScalingThrottlingSeconds'] = dcfg['instanceScalingThrottlingSeconds']
-                elif 'ClassicalInstancingGroupConfig' in config:
-                    icfg = config['ClassicalInstancingGroupConfig']
-                    if icfg.get('playerHardCap') is not None:
-                        kv['PlayerHardCap'] = icfg['playerHardCap']
-                    if icfg.get('minServers') is not None:
-                        kv['MinServers'] = icfg['minServers']
-                    if icfg.get('numExtraServers') is not None:
-                        kv['NumExtraServers'] = icfg['numExtraServers']
-                    if 'enableAutomaticInstanceScaling' in icfg:
-                        kv['EnableAutomaticInstanceScaling'] = str(icfg['enableAutomaticInstanceScaling'])
-                    if icfg.get('instanceScalingThrottlingSeconds') is not None:
-                        kv['InstanceScalingThrottlingSeconds'] = icfg['instanceScalingThrottlingSeconds']
-                elif 'SingleServerConfig' in config:
-                    scfg = config['SingleServerConfig']
-                    if scfg.get('playerHardCap') is not None:
-                        kv['PlayerHardCap'] = scfg['playerHardCap']
+                kv = director_svc.extract_server_config_kv(config)
                 if kv:
-                    _update_ini_section(map_name, kv)
+                    director_svc.update_ini_section(map_name, kv)
 
             return result, 200, {'Content-Type': 'application/json'}
         except Exception as e:
@@ -992,10 +906,12 @@ def register_api_routes(app, services, settings):
     @auth_req
     def director_clear_config():
         try:
+            if not director_svc:
+                return jsonify({'success': False, 'error': 'Director service not available'}), 500
             map_name = request.get_data(as_text=True).strip()
-            result = _director_request('/v0/BattlegroupClearMapConfigOverrides', method='POST', data=map_name, timeout=30, raw_data=True)
+            result = director_svc.clear_map_config(map_name)
             if map_name:
-                _update_ini_section(map_name, {}, remove_section=True)
+                director_svc.update_ini_section(map_name, {}, remove_section=True)
             return result, 200, {'Content-Type': 'application/json'}
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -1004,7 +920,9 @@ def register_api_routes(app, services, settings):
     @auth_req
     def director_character_transfer_get():
         try:
-            data = _director_request('/v0/BattlegroupFetchCharacterTransferRules')
+            if not director_svc:
+                return jsonify({'success': False, 'error': 'Director service not available'}), 500
+            data = director_svc.fetch_character_transfer_rules()
             return data, 200, {'Content-Type': 'application/json'}
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -1013,16 +931,14 @@ def register_api_routes(app, services, settings):
     @auth_req
     def director_character_transfer_update():
         try:
+            if not director_svc:
+                return jsonify({'success': False, 'error': 'Director service not available'}), 500
             config = request.get_json()
-            result = _director_request('/v0/BattlegroupUpdateCharacterTransferSettings', method='POST', data=config, timeout=30)
+            result = director_svc.update_character_transfer(config)
 
-            kv = {}
-            if 'ForceIsWorldClosed' in config:
-                kv['ForceIsWorldClosed'] = str(config['ForceIsWorldClosed'])
-            if 'ForceIsWorldClosingSoon' in config:
-                kv['ForceIsWorldClosingSoon'] = str(config['ForceIsWorldClosingSoon'])
+            kv = director_svc.extract_character_transfer_kv(config)
             if kv:
-                _update_ini_section('CharacterTransfers', kv)
+                director_svc.update_ini_section('CharacterTransfers', kv)
 
             return result, 200, {'Content-Type': 'application/json'}
         except Exception as e:
@@ -1032,10 +948,10 @@ def register_api_routes(app, services, settings):
     @auth_req
     def director_character_transfer_clear():
         try:
-            result = _director_request('/v0/BattlegroupClearCharacterTransferOverrides', method='POST', timeout=30)
-
-            _update_ini_section('CharacterTransfers', {}, remove_section=True)
-
+            if not director_svc:
+                return jsonify({'success': False, 'error': 'Director service not available'}), 500
+            result = director_svc.clear_character_transfer_overrides()
+            director_svc.update_ini_section('CharacterTransfers', {}, remove_section=True)
             return result, 200, {'Content-Type': 'application/json'}
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500

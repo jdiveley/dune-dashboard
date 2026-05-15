@@ -7,6 +7,39 @@ logger = logging.getLogger(__name__)
 LIKE_PC = '%DunePlayerCharacter_C'
 
 
+def _build_player_filters(search='', faction_id='', guild_id='', map_filter='', online_filter=''):
+    """Build WHERE clause and params for player queries.
+
+    Returns (where_clause, params) tuple.
+    """
+    where = ["a.class LIKE %s"]
+    params = [LIKE_PC]
+
+    if search:
+        where.append("""(
+            ps.character_name ILIKE %s
+            OR acc.funcom_id ILIKE %s
+            OR ea.user ILIKE %s
+            OR a.properties::text ILIKE %s
+        )""")
+        params.extend([f'%{search}%'] * 4)
+    if faction_id:
+        where.append("pf.faction_id = %s")
+        params.append(faction_id)
+    if guild_id:
+        where.append("gm.guild_id = %s")
+        params.append(guild_id)
+    if map_filter:
+        where.append("a.map = %s")
+        params.append(map_filter)
+    if online_filter == 'online':
+        where.append("ps.online_status::text = 'Online'")
+    elif online_filter == 'offline':
+        where.append("ps.online_status::text = 'Offline'")
+
+    return ' AND '.join(where), params
+
+
 class PlayerService:
     def __init__(self, db_service):
         self.db = db_service
@@ -60,7 +93,8 @@ class PlayerService:
             ORDER BY ps.character_name
         """)
 
-    def get_players_list(self, search='', faction_id='', guild_id='', map_filter='', online_filter='', limit=200):
+    def get_players_list(self, search='', faction_id='', guild_id='', map_filter='',
+                         online_filter='', limit=200, offset=0):
         where = ["a.class LIKE %s"]
         params = [LIKE_PC]
 
@@ -110,8 +144,8 @@ class PlayerService:
             LEFT JOIN dune.player_ips pi ON ps.player_controller_id = pi.player_id
             WHERE {where_clause}
             ORDER BY player_name
-            LIMIT %s
-        """, params + [limit])
+            LIMIT %s OFFSET %s
+        """, params + [limit, offset])
 
         if not players:
             return []

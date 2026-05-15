@@ -20,6 +20,7 @@ from app.services.vehicle import VehicleService
 from app.services.chat import ChatService
 from app.services.admin import AdminService
 from app.services.updater import UpdateService
+from app.services.director import DirectorService
 from app.utils.cache import MultiCache
 from app.routes.main import register_routes
 from app.routes.api import register_api_routes
@@ -131,6 +132,13 @@ def create_app(settings_path=None):
     chat_svc = ChatService(db_service, k8s_service, ssh_service, static_cache)
     admin_svc = AdminService(db_service, ssh_service)
     updater_svc = UpdateService(base_dir)
+    director_svc = DirectorService(
+        host='127.0.0.1',
+        node_port=settings.get('director', {}).get('port', 32479),
+        k8s_service=k8s_service,
+        ssh_service=ssh_service,
+        namespace=settings['kubernetes']['namespace'],
+    )
 
     services = {
         'db': db_service,
@@ -142,6 +150,7 @@ def create_app(settings_path=None):
         'admin': admin_svc,
         'static_cache': static_cache,
         'updater': updater_svc,
+        'director': director_svc,
     }
 
     socketio = SocketIO(app, cors_allowed_origins=[], async_mode='threading')

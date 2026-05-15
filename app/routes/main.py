@@ -142,10 +142,14 @@ def register_routes(app, services, settings):
             guild_id = request.args.get('guild', '')
             map_filter = request.args.get('map', '')
             online_filter = request.args.get('online', '')
+            page = request.args.get('page', 1, type=int)
+            per_page = 50
+            offset = (page - 1) * per_page
 
             players_list = player_svc.get_players_list(
                 search=search, faction_id=faction_id, guild_id=guild_id,
-                map_filter=map_filter, online_filter=online_filter
+                map_filter=map_filter, online_filter=online_filter,
+                limit=per_page, offset=offset
             )
 
             static_data = get_static_data()
@@ -153,7 +157,8 @@ def register_routes(app, services, settings):
                 players=players_list, factions=static_data['factions'],
                 guilds=static_data['guilds'], maps=static_data['maps'],
                 search=search, sel_faction=faction_id, sel_guild=guild_id,
-                sel_map=map_filter, sel_online=online_filter)
+                sel_map=map_filter, sel_online=online_filter,
+                page=page, per_page=per_page)
         except Exception as e:
             logger.exception("Error in players route")
             return render_template('players.html', db_error=f"{type(e).__name__}: {e}")
