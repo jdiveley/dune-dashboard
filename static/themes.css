@@ -351,7 +351,7 @@
     right: 0;
     background: var(--card-bg);
     min-width: 180px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
     border-radius: 8px;
     z-index: 1000;
     padding: 8px 0;
@@ -384,6 +384,31 @@
 
 .theme-option.active:hover {
     background: var(--primary-dark);
+}
+
+/* Dark theme dropdown adjustments - ensure text is always readable */
+[data-theme="harkonnen"] .theme-dropdown-content,
+[data-theme="spacing-guild"] .theme-dropdown-content,
+[data-theme="tleilax"] .theme-dropdown-content,
+[data-theme="emperor"] .theme-dropdown-content {
+    background: #2a2a35;
+    border-color: #4a4a5a;
+}
+
+[data-theme="harkonnen"] .theme-option,
+[data-theme="spacing-guild"] .theme-option,
+[data-theme="tleilax"] .theme-option,
+[data-theme="emperor"] .theme-option,
+[data-theme="corrino"] .theme-option {
+    color: #e8e8f0;
+}
+
+[data-theme="harkonnen"] .theme-option:hover,
+[data-theme="spacing-guild"] .theme-option:hover,
+[data-theme="tleilax"] .theme-option:hover,
+[data-theme="emperor"] .theme-option:hover,
+[data-theme="corrino"] .theme-option:hover {
+    background: rgba(255,255,255,0.1);
 }
 
 .theme-swatch {
