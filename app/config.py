@@ -75,17 +75,17 @@ DEFAULTS = {
     'maps': {
         'default_map': 'HaggaBasin',
         'DeepDesert': {
-            'image': 'maps/Deep_Desert_Map1.jpg',
+            'image': 'maps/Deep_Desert.webp',
             'label': 'The Deep Desert',
             'bounds': {
-                'min_x': 466906,
-                'max_x': 466907,
-                'min_y': -620339,
-                'max_y': -620340
+                'min_x': 21352,
+                'max_x': 23166,
+                'min_y': 233981,
+                'max_y': 237943
             },
             'flip_y': False,
-            'image_size': {'width': 683, 'height': 683},
-            'default_zoom': 1.45
+            'image_size': {'width': 8000, 'height': 8000},
+            'default_zoom': 0.15
         },
         'HaggaBasin': {
             'image': 'maps/HaggaBasin_8k.webp',
