@@ -98,7 +98,7 @@ DEFAULTS = {
             },
             'flip_y': False,
             'image_size': {'width': 8000, 'height': 8000},
-            'default_zoom': 0
+            'default_zoom': 0.15
         }
     },
 }
