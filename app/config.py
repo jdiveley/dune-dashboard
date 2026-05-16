@@ -73,7 +73,7 @@ DEFAULTS = {
         'renewal_days_before_expiry': 30,
     },
     'maps': {
-        'default_map': 'DeepDesert',
+        'default_map': 'HaggaBasin',
         'DeepDesert': {
             'image': 'maps/Deep_Desert_Map1.jpg',
             'label': 'The Deep Desert',
@@ -84,7 +84,8 @@ DEFAULTS = {
                 'max_y': -620340
             },
             'flip_y': False,
-            'image_size': {'width': 683, 'height': 683}
+            'image_size': {'width': 683, 'height': 683},
+            'default_zoom': 1.45
         },
         'HaggaBasin': {
             'image': 'maps/HaggaBasin_8k.webp',
@@ -96,7 +97,8 @@ DEFAULTS = {
                 'max_y': 237943
             },
             'flip_y': False,
-            'image_size': {'width': 8000, 'height': 8000}
+            'image_size': {'width': 8000, 'height': 8000},
+            'default_zoom': 0
         }
     },
 }

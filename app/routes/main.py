@@ -504,6 +504,7 @@ def register_routes(app, services, settings):
                     'image': cfg.get('image'),
                     'width': image_size.get('width', 1000),
                     'height': image_size.get('height', 1000),
+                    'default_zoom': cfg.get('default_zoom', 0.5),
                     'counts': {
                         'players': sum(1 for p in player_locations if p.get('map') == key and p.get('in_bounds')),
                         'vehicles': sum(1 for v in vehicle_locations if v.get('map') == key and v.get('in_bounds')),
