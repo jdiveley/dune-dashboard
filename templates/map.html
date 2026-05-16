@@ -433,7 +433,7 @@
                     <input type="range" id="zoom-slider" min="15" max="350" value="15" step="10">
                     <button type="button" id="zoom-in" title="Zoom in">+</button>
                 </div>
-                <div class="zoom-readout" id="zoom-readout">15%</div>
+                <div class="zoom-readout" id="zoom-readout">100%</div>
             </section>
 
             <section class="panel-section">
@@ -475,14 +475,18 @@ const mapImageUrls = {
 };
 
 let currentMap = "{{ default_map }}";
-let currentZoom = 0.5;
-let defaultZoom = 0.5;
+let currentZoom = 0;
+let defaultZoom = 0.15;
 let activeMarkerId = null;
 const enabledTypes = { player: true, vehicle: true, base: true };
 
 if (!mapOptions.some(map => map.key === currentMap) && mapOptions.length) {
     currentMap = mapOptions[0].key;
 }
+
+const mapDefaultZoom = (mapOptions.find(m => m.key === currentMap) || mapOptions[0] || {}).default_zoom || 0.15;
+currentZoom = mapDefaultZoom;
+defaultZoom = mapDefaultZoom;
 
 const els = {
     choices: document.getElementById('map-choices'),
