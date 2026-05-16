@@ -99,6 +99,22 @@
     pointer-events: none;
 }
 
+.map-image-credit {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 4px 0 0;
+}
+
+.map-image-credit a {
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.map-image-credit a:hover {
+    text-decoration: underline;
+}
+
 .map-marker {
     position: absolute;
     width: 14px;
@@ -386,6 +402,7 @@
                     <div id="map-markers"></div>
                 </div>
             </div>
+            <div class="map-image-credit">Map images sourced from <a href="https://awakening.wiki/" target="_blank" rel="noopener noreferrer">awakening.wiki</a></div>
             <div class="map-empty" id="map-empty" style="display:none;">
                 <strong>No markers on this map</strong>
                 <span>The selected map has no in-bounds players, vehicles, or bases yet.</span>

@@ -81,6 +81,9 @@
     <main class="container">
         {% block content %}{% endblock %}
     </main>
+    <footer class="site-footer">
+        <span>This is a fan-made project and is not affiliated with, endorsed by, or connected to Funcom, Legendary Entertainment, or any official Dune rights holders. All game assets, trademarks, and intellectual property belong to their respective owners.</span>
+    </footer>
     <div id="update-progress" class="update-progress" style="display:none;">
         <div class="update-progress-inner">
             <h3>Updating Dashboard...</h3>
@@ -193,6 +196,7 @@
     .update-progress-inner p { margin: 0 0 15px; color: var(--text-muted); font-size: 13px; }
     .update-spinner { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .site-footer { text-align: center; padding: 16px 20px; font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 24px; }
     </style>
 </body>
 </html>
