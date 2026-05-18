@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import re
 import shlex
 from flask import Blueprint, request, jsonify
@@ -36,12 +37,12 @@ def register_api_routes(app, services, settings):
     admin_svc = services['admin']
     vehicle_svc = services['vehicle']
 
-    # Get or create rate limiter - use existing one from factory if available
+# Get or create rate limiter - use existing one from factory if available
     if not hasattr(app, 'limiter'):
         limiter = Limiter(
             app=app,
             key_func=get_remote_address,
-            default_limits=["2000 per day", "500 per hour"],
+            default_limits=["2000 per hour"],  # High limit for single admin access
             storage_uri="memory://",
         )
     else:
@@ -1070,3 +1071,59 @@ def register_api_routes(app, services, settings):
             'local_version': updater._current_sha,
             'remote_version': updater._latest_sha,
         })
+
+    # Miner Protection API
+    miner_protection = services.get('miner_protection')
+
+    @app.route('/api/security/status', methods=['GET'])
+    @auth_req
+    def api_security_status():
+        """Get miner protection status."""
+        if not miner_protection:
+            return jsonify({'success': False, 'error': 'Miner protection not available'})
+        status = miner_protection.get_status()
+        return jsonify({'success': True, 'status': status})
+
+    @app.route('/api/security/cleanup', methods=['POST'])
+    @auth_req
+    def api_security_cleanup():
+        """Manually run miner cleanup."""
+        if not miner_protection:
+            return jsonify({'success': False, 'error': 'Miner protection not available'})
+        result = miner_protection.run_cleanup()
+        return jsonify({'success': True, 'result': result})
+
+    @app.route('/api/security/toggle', methods=['POST'])
+    @auth_req
+    def api_security_toggle():
+        """Toggle miner protection on/off."""
+        if not miner_protection:
+            return jsonify({'success': False, 'error': 'Miner protection not available'})
+        data = request.get_json() or {}
+        enabled = data.get('enabled', True)
+        miner_protection.toggle(enabled)
+        # Save to settings
+        if 'miner_protection' not in settings:
+            settings['miner_protection'] = {}
+        settings['miner_protection']['enabled'] = enabled
+        try:
+            import yaml
+            settings_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'settings.yaml')
+            with open(settings_path, 'w') as f:
+                yaml.dump(settings, f, default_flow_style=False, sort_keys=False)
+        except Exception as e:
+            logger.warning(f"Failed to save miner protection setting: {e}")
+        return jsonify({'success': True, 'enabled': enabled})
+
+    @app.route('/api/security/logs', methods=['GET'])
+    @auth_req
+    def api_security_logs():
+        """Get miner protection logs."""
+        if not miner_protection:
+            return jsonify({'success': False, 'error': 'Miner protection not available'})
+        log_type = request.args.get('type', 'all')
+        if log_type == 'detections':
+            logs = miner_protection.get_detection_history()
+        else:
+            logs = miner_protection.get_logs(all_logs=True)
+        return jsonify({'success': True, 'logs': logs})

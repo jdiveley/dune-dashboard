@@ -72,6 +72,12 @@ DEFAULTS = {
         'check_interval_hours': 24,
         'renewal_days_before_expiry': 30,
     },
+    'miner_protection': {
+        'enabled': True,
+        'interval_seconds': 60,
+        'log_file': 'logs/miner-protection.log',
+        'max_log_entries': 1000,
+    },
     'maps': {
         'default_map': 'HaggaBasin',
         'DeepDesert': {
