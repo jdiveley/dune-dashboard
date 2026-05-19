@@ -2205,12 +2205,18 @@ print(json.dumps(s))
     }
     $settings = $settingsJson | ConvertFrom-Json
 
-    # Enable debug logging
-    if (-not $settings.logging) {
-        $settings | Add-Member -NotePropertyName "logging" -NotePropertyValue @{}
+    # Enable debug logging - convert to hashtable for reliable modification
+    $settingsHash = @{}
+    $settings.PSObject.Properties | ForEach-Object { $settingsHash[$_.Name] = $_.Value }
+    
+    if (-not $settingsHash.logging) {
+        $settingsHash.logging = @{}
     }
-    $settings.logging.debug_enabled = $true
-    $settings.logging.level = "DEBUG"
+    $settingsHash.logging.debug_enabled = $true
+    $settingsHash.logging.level = "DEBUG"
+    
+    # Convert back to JSON
+    $settingsJson = $settingsHash | ConvertTo-Json -Depth 10
 
     # Save updated settings
     $updateSettingsScript = @"
