@@ -2205,9 +2205,23 @@ print(json.dumps(s))
     }
     $settings = $settingsJson | ConvertFrom-Json
 
-    # Enable debug logging - convert to hashtable for reliable modification
-    $settingsHash = @{}
-    $settings.PSObject.Properties | ForEach-Object { $settingsHash[$_.Name] = $_.Value }
+    # Enable debug logging - convert entire object to nested hashtables
+    function ConvertTo-HashTable($obj) {
+        $hash = @{}
+        if ($obj -eq $null) { return $hash }
+        $obj.PSObject.Properties | ForEach-Object {
+            if ($_.Value -is [System.Management.Automation.PSCustomObject]) {
+                $hash[$_.Name] = ConvertTo-HashTable $_.Value
+            } elseif ($_.Value -is [System.Array]) {
+                $hash[$_.Name] = @($_.Value)
+            } else {
+                $hash[$_.Name] = $_.Value
+            }
+        }
+        return $hash
+    }
+    
+    $settingsHash = ConvertTo-HashTable $settings
     
     if (-not $settingsHash.logging) {
         $settingsHash.logging = @{}
