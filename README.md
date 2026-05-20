@@ -29,6 +29,11 @@ If you're testing this project, grab builds from nightly for the latest features
 
 ## Features
 
+### ⚠️ Experimental Features (Use at Your Own Risk)
+- **Inventory Grid View** — New visual inventory display with grid slots, equipped items, durability bars, ammo counts, and click-to-edit. **This feature is very unfinished and has known issues.** Do not use for critical inventory management. Do not report issues with this feature until it is marked stable.
+
+### Stable Features
+
 - **Map Features**: Interactive maps with real-world coordinate calibration for Hagga Basin and The Deep Desert. Default view centers on Hagga Basin at 15% zoom. Zoom range: 15%–100%.
 - **Player Management**: View, search, and filter players. Track online status, factions, guilds, and locations.
 - **Chat Logs**: Parsed from text-router pod logs with channel filtering and auto-refresh.

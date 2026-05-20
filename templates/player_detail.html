@@ -293,31 +293,215 @@
     {% endif %}
     <div class="card">
         <div class="card-body">
-            {% for inv in inventories %}
-            <div class="inv-type">{{ inv.inventory_type | inv_label }} (ID: {{ inv.id }}, Slots: {{ inv.max_item_count or '?' }}, Volume: {{ inv.max_item_volume or '?' }})
+            {% for inv in primary_inventories %}
+            {% if inv.inventory_type == 0 %}
+            <div class="inv-section-header">
+                <span>{{ inv.inventory_type | inv_label }}<span class="inv-meta">(ID: {{ inv.id }}, Slots: {{ inv.max_item_count or '?' }}, Volume: {{ inv.max_item_volume or '?' }})</span></span>
+                {% if not is_online %}
+                <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
+                {% endif %}
+            </div>
+            <div class="inv-grid">
+                {% for item in inv.item_list %}
+                <div class="inv-grid-slot has-item" onclick="openItemEditModal({{ item.id }}, '{{ item.template_id | escapejs }}', {{ item.stack_size }}, {{ item.quality_level or 0 }}, {{ item.durability | default('null') }}, {{ item.max_durability | default('null') }}, {{ item.ammo | default('null') }}, {{ inv.id }})">
+                    <div class="inv-slot-icon">&#128230;</div>
+                    <div class="inv-slot-name" title="{{ item.template_id }}">{{ item.template_id | truncate(20) }}</div>
+                    {% if item.stack_size and item.stack_size > 1 %}
+                    <div class="inv-slot-stack">{{ item.stack_size }}</div>
+                    {% endif %}
+                    {% if item.ammo %}
+                    <div class="inv-slot-ammo">&#128293;{{ item.ammo }}</div>
+                    {% endif %}
+                    {% if item.durability and item.max_durability and item.max_durability > 0 %}
+                    {% set dur_pct = (item.durability / item.max_durability * 100) | int %}
+                    {% set dur_class = 'low' if dur_pct < 30 else ('medium' if dur_pct < 70 else '') %}
+                    <div class="inv-slot-durability-bar"><div class="inv-slot-durability-fill {{ dur_class }}" style="width:{{ dur_pct }}%"></div></div>
+                    {% endif %}
+                    {% if item.quality_level and item.quality_level > 0 %}
+                    {% set tier_color = quality_tiers[item.quality_level].color if item.quality_level in quality_tiers else '#9a8a7a' %}
+                    <div class="inv-slot-quality" style="background:{{ tier_color }}"></div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% set item_count = inv.item_list | length %}
+                {% set max_slots = inv.max_item_count or 35 %}
+                {% for i in range(item_count, max_slots) %}
+                <div class="inv-grid-slot" onclick="openAddItemModal({{ inv.id }})">
+                    <div class="inv-slot-empty-icon">+</div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {% elif inv.inventory_type == 1 %}
+            <div class="inv-section-header">
+                <span>{{ inv.inventory_type | inv_label }}<span class="inv-meta">(ID: {{ inv.id }})</span></span>
+                {% if not is_online %}
+                <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
+                {% endif %}
+            </div>
+            <div class="inv-equipped-grid">
+                {% for slot_idx in range(10) %}
+                {% set slot_label = equipped_slot_labels[slot_idx] if slot_idx in equipped_slot_labels else 'Slot ' ~ slot_idx %}
+                {% set slot_item = inv.item_list | selectattr('position_index', 'equalto', slot_idx) | first %}
+                {% if slot_item %}
+                <div class="inv-equipped-slot has-item" onclick="openItemEditModal({{ slot_item.id }}, '{{ slot_item.template_id | escapejs }}', {{ slot_item.stack_size }}, {{ slot_item.quality_level or 0 }}, {{ slot_item.durability | default('null') }}, {{ slot_item.max_durability | default('null') }}, {{ slot_item.ammo | default('null') }}, {{ inv.id }})">
+                    <div class="inv-equipped-label">{{ slot_label }}</div>
+                    <div class="inv-slot-icon">&#128230;</div>
+                    <div class="inv-slot-name" title="{{ slot_item.template_id }}">{{ slot_item.template_id | truncate(15) }}</div>
+                    {% if slot_item.stack_size and slot_item.stack_size > 1 %}
+                    <div class="inv-slot-stack">{{ slot_item.stack_size }}</div>
+                    {% endif %}
+                    {% if slot_item.ammo %}
+                    <div class="inv-slot-ammo">&#128293;{{ slot_item.ammo }}</div>
+                    {% endif %}
+                    {% if slot_item.durability and slot_item.max_durability and slot_item.max_durability > 0 %}
+                    {% set dur_pct = (slot_item.durability / slot_item.max_durability * 100) | int %}
+                    {% set dur_class = 'low' if dur_pct < 30 else ('medium' if dur_pct < 70 else '') %}
+                    <div class="inv-slot-durability-bar"><div class="inv-slot-durability-fill {{ dur_class }}" style="width:{{ dur_pct }}%"></div></div>
+                    {% endif %}
+                    {% if slot_item.quality_level and slot_item.quality_level > 0 %}
+                    {% set tier_color = quality_tiers[slot_item.quality_level].color if slot_item.quality_level in quality_tiers else '#9a8a7a' %}
+                    <div class="inv-slot-quality" style="background:{{ tier_color }}"></div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="inv-equipped-slot" onclick="openAddItemModal({{ inv.id }})">
+                    <div class="inv-equipped-label">{{ slot_label }}</div>
+                    <div style="color:var(--text-muted);opacity:0.3;font-size:20px;">+</div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            {% elif inv.inventory_type == 15 %}
+            <div class="inv-section-header">
+                <span>{{ inv.inventory_type | inv_label }}<span class="inv-meta">(ID: {{ inv.id }})</span></span>
                 {% if not is_online %}
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
             {% if inv.item_list %}
-            <div class="table-wrap" style="margin-bottom:12px;">
-                <table>
-                    <thead><tr><th>Template</th><th>Stack</th><th>Quality</th><th>New</th>{% if not is_online %}<th>Actions</th>{% endif %}</tr></thead>
-                    <tbody>
-                        {% for item in inv.item_list %}
-                        <tr id="item-row-{{ item.id }}">
-                            <td style="font-size:11px;max-width:300px;word-break:break-all;" id="item-template-{{ item.id }}">{{ item.template_id }}</td>
-                            <td><span id="item-stack-{{ item.id }}">{{ item.stack_size }}</span> {% if not is_online %}<button onclick="editItem({{ item.id }}, 'stack_size', {{ item.stack_size }})" class="btn-edit" style="font-size:10px;padding:1px 5px;">&#9998;</button>{% endif %}</td>
-                            <td><span id="item-quality-{{ item.id }}">{{ item.quality_level or 0 }}</span> {% if not is_online %}<button onclick="editItem({{ item.id }}, 'quality_level', {{ item.quality_level or 0 }})" class="btn-edit" style="font-size:10px;padding:1px 5px;">&#9998;</button>{% endif %}</td>
-                            <td>{{ item.is_new or False }}</td>
-                            {% if not is_online %}<td><button onclick="deleteItem({{ item.id }}, '{{ item.template_id }}')" class="btn-danger" style="font-size:10px;padding:1px 5px;">Del</button></td>{% endif %}
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="inv-key-items">
+                {% for item in inv.item_list %}
+                <div class="inv-key-item" onclick="openItemEditModal({{ item.id }}, '{{ item.template_id | escapejs }}', {{ item.stack_size }}, {{ item.quality_level or 0 }}, {{ item.durability | default('null') }}, {{ item.max_durability | default('null') }}, {{ item.ammo | default('null') }}, {{ inv.id }})">
+                    <div class="inv-slot-icon">&#128230;</div>
+                    <div class="inv-slot-name">{{ item.template_id }}</div>
+                    {% if item.stack_size and item.stack_size > 1 %}
+                    <span style="font-size:11px;color:var(--text-muted);">x{{ item.stack_size }}</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
             </div>
             {% else %}
-            <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">(empty)</p>
+            <p style="color:var(--text-muted);font-size:13px;">(empty)</p>
+            {% endif %}
+
+            {% else %}
+            <div class="inv-section-header">
+                <span>{{ inv.inventory_type | inv_label }} (ID: {{ inv.id }})</span>
+                {% if not is_online %}
+                <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
+                {% endif %}
+            </div>
+            {% if inv.item_list %}
+            <div class="inv-grid" style="grid-template-columns:repeat(auto-fill, minmax(64px, 1fr));">
+                {% for item in inv.item_list %}
+                <div class="inv-grid-slot has-item" onclick="openItemEditModal({{ item.id }}, '{{ item.template_id | escapejs }}', {{ item.stack_size }}, {{ item.quality_level or 0 }}, {{ item.durability | default('null') }}, {{ item.max_durability | default('null') }}, {{ item.ammo | default('null') }}, {{ inv.id }})">
+                    <div class="inv-slot-icon">&#128230;</div>
+                    <div class="inv-slot-name" title="{{ item.template_id }}">{{ item.template_id | truncate(15) }}</div>
+                    {% if item.stack_size and item.stack_size > 1 %}
+                    <div class="inv-slot-stack">{{ item.stack_size }}</div>
+                    {% endif %}
+                    {% if item.ammo %}
+                    <div class="inv-slot-ammo">&#128293;{{ item.ammo }}</div>
+                    {% endif %}
+                    {% if item.durability and item.max_durability and item.max_durability > 0 %}
+                    {% set dur_pct = (item.durability / item.max_durability * 100) | int %}
+                    {% set dur_class = 'low' if dur_pct < 30 else ('medium' if dur_pct < 70 else '') %}
+                    <div class="inv-slot-durability-bar"><div class="inv-slot-durability-fill {{ dur_class }}" style="width:{{ dur_pct }}%"></div></div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p style="color:var(--text-muted);font-size:13px;">(empty)</p>
+            {% endif %}
+            {% endif %}
+
+            {% endfor %}
+
+            {% if unknown_inventories %}
+            <div class="inv-unknown-section">
+                <button class="inv-unknown-toggle" onclick="toggleUnknownSection(this)">
+                    <span>Other / Unknown Items ({{ unknown_inventories|map(attribute='item_list')|map('length')|sum }})</span>
+                    <span class="arrow">&#9654;</span>
+                </button>
+                <div class="inv-unknown-content">
+                {% for inv in unknown_inventories %}
+                <div class="inv-unknown-sub">
+                    <div class="inv-unknown-sub-header">{{ inv.inventory_type | inv_label }} (ID: {{ inv.id }})</div>
+                    {% if inv.item_list %}
+                    <div class="inv-unknown-grid">
+                        {% for item in inv.item_list %}
+                        <div class="inv-grid-slot has-item" onclick="openItemEditModal({{ item.id }}, '{{ item.template_id | escapejs }}', {{ item.stack_size }}, {{ item.quality_level or 0 }}, {{ item.durability | default('null') }}, {{ item.max_durability | default('null') }}, {{ item.ammo | default('null') }}, {{ inv.id }})">
+                            <div class="inv-slot-icon">&#128230;</div>
+                            <div class="inv-slot-name" title="{{ item.template_id }}">{{ item.template_id | truncate(20) }}</div>
+                            {% if item.stack_size and item.stack_size > 1 %}
+                            <div class="inv-slot-stack">{{ item.stack_size }}</div>
+                            {% endif %}
+                            {% if item.ammo %}
+                            <div class="inv-slot-ammo">&#128293;{{ item.ammo }}</div>
+                            {% endif %}
+                            {% if item.durability and item.max_durability and item.max_durability > 0 %}
+                            {% set dur_pct = (item.durability / item.max_durability * 100) | int %}
+                            {% set dur_class = 'low' if dur_pct < 30 else ('medium' if dur_pct < 70 else '') %}
+                            <div class="inv-slot-durability-bar"><div class="inv-slot-durability-fill {{ dur_class }}" style="width:{{ dur_pct }}%"></div></div>
+                            {% endif %}
+                            {% if item.quality_level and item.quality_level > 0 %}
+                            {% set tier_color = quality_tiers[item.quality_level].color if item.quality_level in quality_tiers else '#9a8a7a' %}
+                            <div class="inv-slot-quality" style="background:{{ tier_color }}"></div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p style="color:var(--text-muted);font-size:11px;">(empty)</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% for inv in other_inventories %}
+            <div class="inv-section-header">
+                <span>{{ inv.inventory_type | inv_label }} (ID: {{ inv.id }})</span>
+                {% if not is_online %}
+                <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
+                {% endif %}
+            </div>
+            {% if inv.item_list %}
+            <div class="inv-grid" style="grid-template-columns:repeat(auto-fill, minmax(64px, 1fr));">
+                {% for item in inv.item_list %}
+                <div class="inv-grid-slot has-item" onclick="openItemEditModal({{ item.id }}, '{{ item.template_id | escapejs }}', {{ item.stack_size }}, {{ item.quality_level or 0 }}, {{ item.durability | default('null') }}, {{ item.max_durability | default('null') }}, {{ item.ammo | default('null') }}, {{ inv.id }})">
+                    <div class="inv-slot-icon">&#128230;</div>
+                    <div class="inv-slot-name" title="{{ item.template_id }}">{{ item.template_id | truncate(15) }}</div>
+                    {% if item.stack_size and item.stack_size > 1 %}
+                    <div class="inv-slot-stack">{{ item.stack_size }}</div>
+                    {% endif %}
+                    {% if item.ammo %}
+                    <div class="inv-slot-ammo">&#128293;{{ item.ammo }}</div>
+                    {% endif %}
+                    {% if item.durability and item.max_durability and item.max_durability > 0 %}
+                    {% set dur_pct = (item.durability / item.max_durability * 100) | int %}
+                    {% set dur_class = 'low' if dur_pct < 30 else ('medium' if dur_pct < 70 else '') %}
+                    <div class="inv-slot-durability-bar"><div class="inv-slot-durability-fill {{ dur_class }}" style="width:{{ dur_pct }}%"></div></div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p style="color:var(--text-muted);font-size:13px;">(empty)</p>
             {% endif %}
             {% endfor %}
         </div>
@@ -453,6 +637,49 @@
     </div>
 </div>
 
+<!-- Item Edit Modal -->
+<div id="item-edit-modal" class="modal-overlay item-edit-modal" style="display:none;" onclick="if(event.target===this)closeModal('item-edit-modal')">
+    <div class="modal" style="max-width:450px;">
+        <h3>Edit Item</h3>
+        <div class="item-preview">
+            <div class="item-icon">&#128230;</div>
+            <div class="item-info">
+                <div class="item-name" id="item-edit-name"></div>
+                <div class="item-id" id="item-edit-id"></div>
+            </div>
+        </div>
+        <form id="item-edit-form" class="item-edit-form">
+            <input type="hidden" id="item-edit-item-id" value="">
+            <input type="hidden" id="item-edit-inv-id" value="">
+            <div class="form-row">
+                <label>Stack Size:</label>
+                <input type="number" id="item-edit-stack" min="1" value="1">
+            </div>
+            <div class="form-row">
+                <label>Quality:</label>
+                <input type="number" id="item-edit-quality" min="0" max="4" value="0">
+            </div>
+            <div class="form-row">
+                <label>Durability:</label>
+                <input type="number" id="item-edit-durability" step="0.1" min="0" placeholder="auto">
+            </div>
+            <div class="form-row">
+                <label>Max Durability:</label>
+                <input type="number" id="item-edit-max-durability" step="0.1" min="0" placeholder="auto">
+            </div>
+            <div class="form-row">
+                <label>Ammo:</label>
+                <input type="number" id="item-edit-ammo" min="0" placeholder="auto">
+            </div>
+            <div class="item-edit-actions">
+                <button type="button" onclick="submitItemEdit()" class="btn-save">Save</button>
+                <button type="button" onclick="submitItemDelete()" class="btn-danger">Delete</button>
+                <button type="button" onclick="closeModal('item-edit-modal')" class="btn-cancel">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 {% endif %}
 {% endblock %}
 
@@ -557,6 +784,13 @@ async function submitVitalsEdit() {
     return false;
 }
 
+function toggleUnknownSection(btn) {
+    const content = btn.nextElementSibling;
+    const arrow = btn.querySelector('.arrow');
+    content.classList.toggle('open');
+    arrow.classList.toggle('open');
+}
+
 async function editItem(itemId, field, currentValue) {
     const newValue = prompt(`Edit ${field} for item ${itemId}:`, currentValue);
     if (newValue === null || newValue === currentValue) return;
@@ -568,9 +802,7 @@ async function editItem(itemId, field, currentValue) {
         const resp = await csrfFetch('/api/edit_item', { method: 'POST', body: data });
         const result = await resp.json();
         if (result.success) {
-            const span = document.getElementById('item-' + field.replace('_', '-') + '-' + itemId);
-            if (span) span.textContent = result.value;
-            else location.reload();
+            location.reload();
         } else {
             alert('Error: ' + (result.error || 'Unknown error'));
         }
@@ -579,7 +811,63 @@ async function editItem(itemId, field, currentValue) {
     }
 }
 
-async function deleteItem(itemId, templateName) {
+function openItemEditModal(itemId, templateName, stackSize, quality, durability, maxDurability, ammo, invId) {
+    document.getElementById('item-edit-item-id').value = itemId;
+    document.getElementById('item-edit-inv-id').value = invId;
+    document.getElementById('item-edit-name').textContent = templateName;
+    document.getElementById('item-edit-id').textContent = 'ID: ' + itemId;
+    document.getElementById('item-edit-stack').value = stackSize || 1;
+    document.getElementById('item-edit-quality').value = quality || 0;
+    document.getElementById('item-edit-durability').value = durability !== null ? durability : '';
+    document.getElementById('item-edit-max-durability').value = maxDurability !== null ? maxDurability : '';
+    document.getElementById('item-edit-ammo').value = ammo !== null ? ammo : '';
+    openModal('item-edit-modal');
+}
+
+async function submitItemEdit() {
+    const itemId = document.getElementById('item-edit-item-id').value;
+    const invId = document.getElementById('item-edit-inv-id').value;
+    const stackSize = document.getElementById('item-edit-stack').value;
+    const quality = document.getElementById('item-edit-quality').value;
+    const durability = document.getElementById('item-edit-durability').value;
+    const maxDurability = document.getElementById('item-edit-max-durability').value;
+    const ammo = document.getElementById('item-edit-ammo').value;
+
+    const fields = { stack_size: stackSize, quality_level: quality };
+    if (durability) fields.durability = parseFloat(durability);
+    if (maxDurability) fields.max_durability = parseFloat(maxDurability);
+    if (ammo) fields.ammo = parseInt(ammo);
+
+    let allSuccess = true;
+    for (const [field, value] of Object.entries(fields)) {
+        const data = new FormData();
+        data.append('item_id', itemId);
+        data.append('field', field);
+        data.append('value', value);
+        try {
+            const resp = await csrfFetch('/api/edit_item', { method: 'POST', body: data });
+            const result = await resp.json();
+            if (!result.success) {
+                alert('Error updating ' + field + ': ' + (result.error || 'Unknown error'));
+                allSuccess = false;
+                break;
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+            allSuccess = false;
+            break;
+        }
+    }
+
+    if (allSuccess) {
+        closeModal('item-edit-modal');
+        location.reload();
+    }
+}
+
+async function submitItemDelete() {
+    const itemId = document.getElementById('item-edit-item-id').value;
+    const templateName = document.getElementById('item-edit-name').textContent;
     if (!confirm(`Delete item "${templateName}" (ID: ${itemId})? This cannot be undone.`)) return;
     const data = new FormData();
     data.append('item_id', itemId);
@@ -587,8 +875,8 @@ async function deleteItem(itemId, templateName) {
         const resp = await csrfFetch('/api/delete_item', { method: 'POST', body: data });
         const result = await resp.json();
         if (result.success) {
-            const row = document.getElementById('item-row-' + itemId);
-            if (row) row.remove();
+            closeModal('item-edit-modal');
+            location.reload();
         } else {
             alert('Error: ' + (result.error || 'Unknown error'));
         }

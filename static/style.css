@@ -407,6 +407,359 @@ td a:hover { text-decoration: underline; }
 
 .inv-type:first-child { margin-top: 0; }
 
+.inv-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 16px 0 8px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.inv-section-header .inv-meta {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-muted);
+    margin-left: 8px;
+}
+
+/* Main Inventory Grid */
+.inv-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.inv-grid-slot {
+    aspect-ratio: 1;
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s;
+    background: var(--card-bg);
+    min-height: 80px;
+    overflow: hidden;
+}
+
+.inv-grid-slot:hover {
+    border-color: var(--primary);
+    background: var(--hover);
+}
+
+.inv-grid-slot.has-item {
+    border-style: solid;
+    border-color: var(--border);
+}
+
+.inv-grid-slot.has-item:hover {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(201,162,78,0.2);
+}
+
+.inv-slot-icon {
+    font-size: 22px;
+    line-height: 1;
+    margin-bottom: 2px;
+    color: var(--text-light);
+}
+
+.inv-slot-name {
+    font-size: 8px;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.1;
+    max-width: 90%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.inv-slot-stack {
+    position: absolute;
+    bottom: 2px;
+    right: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text);
+    background: rgba(255,255,255,0.8);
+    padding: 0 3px;
+    border-radius: 2px;
+}
+
+.inv-slot-ammo {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    font-size: 9px;
+    font-weight: 600;
+    color: #e67e22;
+}
+
+.inv-slot-durability-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--border);
+    border-radius: 0 0 4px 4px;
+    overflow: hidden;
+}
+
+.inv-slot-durability-fill {
+    height: 100%;
+    background: var(--success);
+    transition: width 0.2s;
+}
+
+.inv-slot-durability-fill.medium { background: #f39c12; }
+.inv-slot-durability-fill.low { background: var(--danger); }
+
+.inv-slot-quality {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.inv-slot-empty-icon {
+    color: var(--text-muted);
+    opacity: 0.3;
+    font-size: 18px;
+}
+
+/* Equipped Items Grid */
+.inv-equipped-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.inv-equipped-slot {
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    text-align: center;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s;
+    background: var(--card-bg);
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.inv-equipped-slot:hover {
+    border-color: var(--primary);
+    background: var(--hover);
+}
+
+.inv-equipped-slot.has-item {
+    border-style: solid;
+}
+
+.inv-equipped-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.inv-equipped-slot .inv-slot-icon {
+    font-size: 22px;
+}
+
+.inv-equipped-slot .inv-slot-name {
+    font-size: 9px;
+}
+
+/* Key Items List */
+.inv-key-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.inv-key-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--card-bg);
+}
+
+.inv-key-item:hover {
+    border-color: var(--primary);
+    background: var(--hover);
+}
+
+.inv-key-item .inv-slot-icon {
+    font-size: 16px;
+}
+
+.inv-key-item .inv-slot-name {
+    font-size: 12px;
+    flex: 1;
+}
+
+/* Unknown Section */
+.inv-unknown-section {
+    margin-top: 12px;
+}
+
+.inv-unknown-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    transition: all 0.15s;
+    width: 100%;
+}
+
+.inv-unknown-toggle:hover {
+    border-color: var(--primary);
+    background: var(--hover);
+}
+
+.inv-unknown-toggle .arrow {
+    transition: transform 0.2s;
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.inv-unknown-toggle .arrow.open {
+    transform: rotate(90deg);
+}
+
+.inv-unknown-content {
+    display: none;
+    margin-top: 8px;
+}
+
+.inv-unknown-content.open {
+    display: block;
+}
+
+.inv-unknown-sub {
+    margin-bottom: 12px;
+}
+
+.inv-unknown-sub-header {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-light);
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+}
+
+.inv-unknown-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 4px;
+}
+
+.inv-unknown-grid .inv-grid-slot {
+    min-height: 56px;
+    border-width: 1px;
+}
+
+/* Item Edit Modal */
+.item-edit-modal .item-preview {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--hover);
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.item-edit-modal .item-preview .item-icon {
+    font-size: 32px;
+    color: var(--text-light);
+}
+
+.item-edit-modal .item-preview .item-info {
+    flex: 1;
+}
+
+.item-edit-modal .item-preview .item-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.item-edit-modal .item-preview .item-id {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: monospace;
+}
+
+.item-edit-form .form-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.item-edit-form .form-row label {
+    min-width: 80px;
+    font-size: 13px;
+    color: var(--text-light);
+    margin: 0;
+}
+
+.item-edit-form .form-row input {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 13px;
+    background: var(--card-bg);
+    color: var(--text);
+}
+
+.item-edit-form .form-row input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(201,162,78,0.15);
+}
+
+.item-edit-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.item-edit-actions .btn-save { flex: 1; }
+.item-edit-actions .btn-cancel { flex: 1; }
+.item-edit-actions .btn-danger { flex: 0 0 auto; }
+
 /* Info box */
 .info-box {
     background: #eaf2f8;

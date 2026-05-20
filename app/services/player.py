@@ -274,7 +274,7 @@ class PlayerService:
     def get_player_inventories(self, player_id):
         try:
             inventories = self.db.query("""
-                SELECT i.id, i.actor_id, i.inventory_type,
+                SELECT i.id, i.actor_id, i.inventory_type, i.max_item_count, i.max_item_volume,
                     COALESCE(json_agg(
                         json_build_object(
                             'id', items.id,
@@ -282,20 +282,66 @@ class PlayerService:
                             'stack_size', items.stack_size,
                             'quality_level', items.quality_level,
                             'is_new', items.is_new,
+                            'position_index', items.position_index,
                             'stats_text', items.stats::text
                         ) ORDER BY items.position_index
                     ) FILTER (WHERE items.id IS NOT NULL), '[]') as item_list
                 FROM dune.inventories i
                 LEFT JOIN dune.items ON i.id = items.inventory_id
                 WHERE i.actor_id = %s
-                GROUP BY i.id, i.actor_id, i.inventory_type
+                GROUP BY i.id, i.actor_id, i.inventory_type, i.max_item_count, i.max_item_volume
                 ORDER BY i.inventory_type
             """, [player_id]) or []
             for inv in inventories:
-                inv['item_list'] = inv.get('item_list', []) or []
+                if not isinstance(inv, dict):
+                    logger.warning(f"Inventory row is not a dict: {type(inv)}")
+                    continue
+                raw_items = inv.get('item_list', []) or []
+                if isinstance(raw_items, str):
+                    try:
+                        import json
+                        raw_items = json.loads(raw_items)
+                    except (json.JSONDecodeError, TypeError):
+                        raw_items = []
+                parsed_items = []
+                for item in raw_items:
+                    if not isinstance(item, dict):
+                        logger.warning(f"Item is not a dict: {type(item)}, value: {repr(item)[:100]}")
+                        continue
+                    new_item = dict(item)
+                    stats_text = new_item.pop('stats_text', None)
+                    stats = {}
+                    if stats_text:
+                        try:
+                            import json
+                            stats = json.loads(stats_text)
+                        except (json.JSONDecodeError, TypeError):
+                            stats = {}
+                    new_item['stats'] = stats
+                    dur_stats = stats.get('FItemStackAndDurabilityStats')
+                    if isinstance(dur_stats, dict):
+                        new_item['durability'] = dur_stats.get('CurrentDurability')
+                        new_item['max_durability'] = dur_stats.get('DecayedMaxDurability')
+                    elif isinstance(dur_stats, list) and dur_stats:
+                        new_item['durability'] = dur_stats[0].get('CurrentDurability') if isinstance(dur_stats[0], dict) else None
+                        new_item['max_durability'] = dur_stats[0].get('DecayedMaxDurability') if isinstance(dur_stats[0], dict) else None
+                    else:
+                        new_item['durability'] = None
+                        new_item['max_durability'] = None
+                    weapon_stats = stats.get('FWeaponItemStats')
+                    if isinstance(weapon_stats, dict):
+                        new_item['ammo'] = weapon_stats.get('CurrentAmmo')
+                    elif isinstance(weapon_stats, list) and weapon_stats:
+                        new_item['ammo'] = weapon_stats[0].get('CurrentAmmo') if isinstance(weapon_stats[0], dict) else None
+                    else:
+                        new_item['ammo'] = None
+                    parsed_items.append(new_item)
+                inv['item_list'] = parsed_items
             return inventories
         except Exception as e:
             logger.warning(f"Failed to get inventories: {e}")
+            import traceback
+            logger.warning(traceback.format_exc())
             inventories = self.db.query(
                 "SELECT i.* FROM dune.inventories i WHERE i.actor_id = %s ORDER BY i.inventory_type",
                 [player_id]

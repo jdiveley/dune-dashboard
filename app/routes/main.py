@@ -42,12 +42,21 @@ def register_routes(app, services, settings):
     @app.context_processor
     def inject_globals():
         conn_ok = db.check_health()
+        from app.utils.constants import (
+            INVENTORY_HIDDEN_TYPES, INVENTORY_UNKNOWN_TYPES, INVENTORY_PRIMARY_TYPES,
+            EQUIPPED_SLOT_LABELS, QUALITY_TIERS,
+        )
         return dict(
             nav_pages=NAV_PAGES,
             current_path=request.path if request else '/',
             fmt_role=fmt_role,
             conn_ok=conn_ok,
             current_user=current_user,
+            inv_hidden_types=INVENTORY_HIDDEN_TYPES,
+            inv_unknown_types=INVENTORY_UNKNOWN_TYPES,
+            inv_primary_types=INVENTORY_PRIMARY_TYPES,
+            equipped_slot_labels=EQUIPPED_SLOT_LABELS,
+            quality_tiers=QUALITY_TIERS,
         )
 
     @app.template_filter('inv_label')
@@ -96,6 +105,12 @@ def register_routes(app, services, settings):
             return f'{n:,}'
         except (ValueError, TypeError):
             return str(val)
+
+    @app.template_filter('escapejs')
+    def escapejs_filter(s):
+        if not s:
+            return ''
+        return s.replace('\\', '\\\\').replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
 
     # Health check
     @app.route('/health')
@@ -192,19 +207,29 @@ def register_routes(app, services, settings):
 
             is_online = player_svc.is_online(player_controller_id) if player_controller_id else False
 
+            from app.utils.constants import INVENTORY_HIDDEN_TYPES, INVENTORY_UNKNOWN_TYPES, INVENTORY_PRIMARY_TYPES
+            primary_inventories = [inv for inv in inventories if inv['inventory_type'] in INVENTORY_PRIMARY_TYPES and inv['inventory_type'] not in INVENTORY_HIDDEN_TYPES]
+            unknown_inventories = [inv for inv in inventories if inv['inventory_type'] in INVENTORY_UNKNOWN_TYPES]
+            other_inventories = [inv for inv in inventories if inv['inventory_type'] not in INVENTORY_PRIMARY_TYPES and inv['inventory_type'] not in INVENTORY_UNKNOWN_TYPES and inv['inventory_type'] not in INVENTORY_HIDDEN_TYPES]
+
             static_data = get_static_data()
 
             return render_template('player_detail.html',
                 player=player, guild=guild, vehicles=player_vehicles,
                 buildings=buildings_result, currency=currency,
-                inventories=inventories, landclaims=landclaims,
+                inventories=inventories, primary_inventories=primary_inventories,
+                unknown_inventories=unknown_inventories, other_inventories=other_inventories,
+                landclaims=landclaims,
                 specialization=specialization, tech_knowledge=tech_knowledge,
                 purchased_keystones=purchased_keystones, all_keystones=static_data['keystones'],
                 faction_reputation=faction_reputation, landsraad_info=landsraad_info,
                 vitals=vitals, is_online=is_online)
         except Exception as e:
             logger.exception("Error in player_detail route")
-            return render_template('player_detail.html', db_error=f"{type(e).__name__}: {e}")
+            return render_template('player_detail.html',
+                player=None, inventories=[], primary_inventories=[],
+                unknown_inventories=[], other_inventories=[],
+                db_error=f"{type(e).__name__}: {e}")
 
     # Vehicles
     @app.route('/vehicles')

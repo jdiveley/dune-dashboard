@@ -578,7 +578,7 @@ class AdminService:
     def edit_item(self, item_id, field, value):
         if item_id is None or field is None or value is None:
             return False, "Missing parameters"
-        allowed_fields = ('stack_size', 'quality_level', 'is_new')
+        allowed_fields = ('stack_size', 'quality_level', 'is_new', 'durability', 'max_durability', 'ammo')
         if field not in allowed_fields:
             return False, f"Invalid field. Allowed: {', '.join(allowed_fields)}"
 
@@ -593,6 +593,23 @@ class AdminService:
                     "UPDATE dune.items SET is_new = %s WHERE id = %s RETURNING id, stack_size, quality_level, is_new",
                     [bool(value), item_id]
                 )
+            elif field in ('durability', 'max_durability', 'ammo'):
+                stats_path = {
+                    'durability': '{FItemStackAndDurabilityStats,CurrentDurability}',
+                    'max_durability': '{FItemStackAndDurabilityStats,DecayedMaxDurability}',
+                    'ammo': '{FWeaponItemStats,CurrentAmmo}',
+                }[field]
+                cur.execute(
+                    "UPDATE dune.items SET stats = jsonb_set(stats, %s, %s::jsonb, true) WHERE id = %s RETURNING id",
+                    [stats_path.split(','), str(value), item_id]
+                )
+                row = cur.fetchone()
+                if not row:
+                    conn.rollback()
+                    return False, "Item not found"
+                conn.commit()
+                audit_logger.info(f"EDIT_ITEM: item_id={item_id} field={field} value={value}")
+                return True, {"item_id": item_id, "field": field, "value": value}
             else:
                 cur.execute(
                     "UPDATE dune.items SET {} = %s WHERE id = %s RETURNING id, stack_size, quality_level, is_new".format(field),
