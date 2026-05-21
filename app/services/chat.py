@@ -36,7 +36,9 @@ class ChatService:
             """)
             self.db.execute("CREATE INDEX IF NOT EXISTS idx_chat_history_timestamp ON dune.chat_history (timestamp DESC)")
             if self.db_owner:
-                self.db.execute("ALTER TABLE IF EXISTS dune.chat_history OWNER TO %s", (self.db_owner,))
+                from psycopg2 import sql
+                owner_ident = sql.Identifier(self.db_owner).as_string(None)
+                self.db.execute(f"ALTER TABLE IF EXISTS dune.chat_history OWNER TO {owner_ident}")
             self.ensured_table = True
             logger.info("Chat history table ready")
             return True

@@ -177,9 +177,11 @@ class DatabaseService:
                 )
             """)
             if self.db_owner:
-                cur.execute("ALTER TABLE IF EXISTS dune.player_ips OWNER TO %s", (self.db_owner,))
-                cur.execute("ALTER TABLE IF EXISTS dune.bans OWNER TO %s", (self.db_owner,))
-                cur.execute("ALTER TABLE IF EXISTS dune.player_actions OWNER TO %s", (self.db_owner,))
+                from psycopg2 import sql
+                owner_ident = sql.Identifier(self.db_owner).as_string(conn)
+                cur.execute(f"ALTER TABLE IF EXISTS dune.player_ips OWNER TO {owner_ident}")
+                cur.execute(f"ALTER TABLE IF EXISTS dune.bans OWNER TO {owner_ident}")
+                cur.execute(f"ALTER TABLE IF EXISTS dune.player_actions OWNER TO {owner_ident}")
             conn.commit()
             logger.info("Dashboard tables ensured (player_ips, bans, player_actions)")
         except Exception as e:
