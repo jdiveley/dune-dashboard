@@ -21,11 +21,13 @@ If you're testing this project, grab builds from nightly for the latest features
 ## Quick Start
 
 ### Windows
-1. Double-click `launcher.ps1` (or run `.\launcher.ps1` in PowerShell)
+1. Double-click `launcher.bat` (or run `.\launcher.ps1` in PowerShell)
 2. Select option **2** to run Setup on first use
 3. Select option **1** to Start Dashboard
 
 > **Tip**: The launcher automatically finds your SSH key from the Dune Awakening server installation at `%LOCALAPPDATA%\DuneAwakeningServer\sshKey`.
+>
+> **Note**: If PowerShell blocks running scripts due to execution policy (`launcher.ps1` won't run), use `launcher.bat` instead — it bypasses the restriction automatically. You can also run `powershell.exe -ExecutionPolicy Bypass -File .\launcher.ps1` directly from Command Prompt.
 
 ## Features
 
