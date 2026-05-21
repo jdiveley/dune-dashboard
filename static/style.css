@@ -503,6 +503,10 @@ td a:hover { text-decoration: underline; }
     border-color: var(--border);
 }
 
+.inv-grid-slot.has-item > * {
+    pointer-events: none !important;
+}
+
 .inv-grid-slot.has-item:hover {
     border-color: var(--primary);
     box-shadow: 0 0 0 2px rgba(201,162,78,0.2);
@@ -660,6 +664,10 @@ td a:hover { text-decoration: underline; }
     border-style: solid;
 }
 
+.inv-hotbar-slot.has-item > * {
+    pointer-events: none !important;
+}
+
 .inv-hotbar-slot .inv-slot-icon {
     font-size: 14px;
     line-height: 1;
@@ -748,6 +756,10 @@ td a:hover { text-decoration: underline; }
 .inv-key-grid-slot:hover {
     border-color: var(--primary);
     background: var(--hover);
+}
+
+.inv-key-grid-slot > * {
+    pointer-events: none !important;
 }
 
 .inv-key-grid-slot .inv-slot-icon {
