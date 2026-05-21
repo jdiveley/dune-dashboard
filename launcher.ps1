@@ -1998,6 +1998,7 @@ print(json.dumps(s))
 
     $RemotePort = 15432
     Write-Log -Message "Starting port-forward: ${LocalPort}:${RemotePort} on service $DBService" -Category "database"
+    ssh -i $SSHKey -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 ${SSHUser}@${ServerHost} "sudo fuser -k ${LocalPort}/tcp ${DirectorPort}/tcp 2>/dev/null; sleep 1" 2>$null
     $pfCmd = "nohup sudo kubectl port-forward -n $Namespace svc/$DBService $LocalPort`:$RemotePort > /tmp/pf.log 2>`&1 `"&`""
     ssh -i $SSHKey -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 "${SSHUser}@${ServerHost}" $pfCmd 2>$null
     Start-Sleep -Seconds 2
@@ -2172,7 +2173,7 @@ print(json.dumps(s))
     Write-Host ""
     Write-Host "Stopping tunnels..." -ForegroundColor Cyan
     Stop-Process -Id $sshTunnel.Id -Force -ErrorAction SilentlyContinue
-    $pkillCmd = 'ssh -i "' + $SSHKey + '" -o StrictHostKeyChecking=accept-new ' + $SSHUser + '@' + $ServerHost + ' "pkill -f kubectl-port-forward"'
+    $pkillCmd = 'ssh -i "' + $SSHKey + '" -o StrictHostKeyChecking=accept-new ' + $SSHUser + '@' + $ServerHost + ' "sudo fuser -k 15433/tcp 32479/tcp 2>/dev/null"'
     cmd /c $pkillCmd 2>$null
 }
 
