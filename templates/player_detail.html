@@ -291,6 +291,10 @@
     {% if is_online %}
     <div style="font-size:12px;color:#e67e22;padding:0 16px 8px;">Player is online &mdash; editing disabled. Log out first.</div>
     {% endif %}
+    <div class="experimental-banner">
+        <span class="banner-icon">&#9888;</span>
+        <span class="banner-text">Inventory editing is still being forged in the deep desert. Items may not persist, or the sandworm may eat your edits. <strong>Use with caution</strong> — the spice must flow, but bugs may flow with it.</span>
+    </div>
     <div class="card">
         <div class="card-body">
             {% for inv in primary_inventories %}
@@ -301,34 +305,35 @@
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
-            <div class="inv-grid">
-                {% for item in inv.item_list %}
-                <div class="inv-grid-slot has-item" onclick="openItemEditModal({{ item.id }}, '{{ item.template_id | escapejs }}', {{ item.stack_size }}, {{ item.quality_level or 0 }}, {{ item.durability | default('null') }}, {{ item.max_durability | default('null') }}, {{ item.ammo | default('null') }}, {{ inv.id }})">
+            {% set max_main_slots = inv.max_item_count or 35 %}
+            <div class="inv-grid inv-grid-compact">
+                {% for i in range(max_main_slots) %}
+                {% set slot_item = inv.item_list | selectattr('position_index', 'equalto', i) | first %}
+                {% if slot_item %}
+                <div class="inv-grid-slot has-item" onclick="openItemEditModal({{ slot_item.id }}, '{{ slot_item.template_id | escapejs }}', {{ slot_item.stack_size }}, {{ slot_item.quality_level or 0 }}, {{ slot_item.durability | default('null') }}, {{ slot_item.max_durability | default('null') }}, {{ slot_item.ammo | default('null') }}, {{ inv.id }})">
                     <div class="inv-slot-icon">&#128230;</div>
-                    <div class="inv-slot-name" title="{{ item.template_id }}">{{ item.template_id | truncate(20) }}</div>
-                    {% if item.stack_size and item.stack_size > 1 %}
-                    <div class="inv-slot-stack">{{ item.stack_size }}</div>
+                    <div class="inv-slot-name" title="{{ slot_item.template_id }}">{{ slot_item.template_id | truncate(20) }}</div>
+                    {% if slot_item.stack_size and slot_item.stack_size > 1 %}
+                    <div class="inv-slot-stack">{{ slot_item.stack_size }}</div>
                     {% endif %}
-                    {% if item.ammo %}
-                    <div class="inv-slot-ammo">&#128293;{{ item.ammo }}</div>
+                    {% if slot_item.ammo %}
+                    <div class="inv-slot-ammo">&#128293;{{ slot_item.ammo }}</div>
                     {% endif %}
-                    {% if item.durability and item.max_durability and item.max_durability > 0 %}
-                    {% set dur_pct = (item.durability / item.max_durability * 100) | int %}
+                    {% if slot_item.durability and slot_item.max_durability and slot_item.max_durability > 0 %}
+                    {% set dur_pct = (slot_item.durability / slot_item.max_durability * 100) | int %}
                     {% set dur_class = 'low' if dur_pct < 30 else ('medium' if dur_pct < 70 else '') %}
                     <div class="inv-slot-durability-bar"><div class="inv-slot-durability-fill {{ dur_class }}" style="width:{{ dur_pct }}%"></div></div>
                     {% endif %}
-                    {% if item.quality_level and item.quality_level > 0 %}
-                    {% set tier_color = quality_tiers[item.quality_level].color if item.quality_level in quality_tiers else '#9a8a7a' %}
+                    {% if slot_item.quality_level and slot_item.quality_level > 0 %}
+                    {% set tier_color = quality_tiers[slot_item.quality_level].color if slot_item.quality_level in quality_tiers else '#9a8a7a' %}
                     <div class="inv-slot-quality" style="background:{{ tier_color }}"></div>
                     {% endif %}
                 </div>
-                {% endfor %}
-                {% set item_count = inv.item_list | length %}
-                {% set max_slots = inv.max_item_count or 35 %}
-                {% for i in range(item_count, max_slots) %}
+                {% else %}
                 <div class="inv-grid-slot" onclick="openAddItemModal({{ inv.id }})">
                     <div class="inv-slot-empty-icon">+</div>
                 </div>
+                {% endif %}
                 {% endfor %}
             </div>
 
@@ -339,13 +344,13 @@
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
-            <div class="inv-equipped-grid">
+            <div class="inv-grid inv-equipped-compact">
                 {% for slot_idx in range(10) %}
                 {% set slot_label = equipped_slot_labels[slot_idx] if slot_idx in equipped_slot_labels else 'Slot ' ~ slot_idx %}
                 {% set slot_item = inv.item_list | selectattr('position_index', 'equalto', slot_idx) | first %}
                 {% if slot_item %}
-                <div class="inv-equipped-slot has-item" onclick="openItemEditModal({{ slot_item.id }}, '{{ slot_item.template_id | escapejs }}', {{ slot_item.stack_size }}, {{ slot_item.quality_level or 0 }}, {{ slot_item.durability | default('null') }}, {{ slot_item.max_durability | default('null') }}, {{ slot_item.ammo | default('null') }}, {{ inv.id }})">
-                    <div class="inv-equipped-label">{{ slot_label }}</div>
+                <div class="inv-grid-slot has-item" onclick="openItemEditModal({{ slot_item.id }}, '{{ slot_item.template_id | escapejs }}', {{ slot_item.stack_size }}, {{ slot_item.quality_level or 0 }}, {{ slot_item.durability | default('null') }}, {{ slot_item.max_durability | default('null') }}, {{ slot_item.ammo | default('null') }}, {{ inv.id }})">
+                    <div class="inv-equipped-badge">{{ slot_label }}</div>
                     <div class="inv-slot-icon">&#128230;</div>
                     <div class="inv-slot-name" title="{{ slot_item.template_id }}">{{ slot_item.template_id | truncate(15) }}</div>
                     {% if slot_item.stack_size and slot_item.stack_size > 1 %}
@@ -365,9 +370,36 @@
                     {% endif %}
                 </div>
                 {% else %}
-                <div class="inv-equipped-slot" onclick="openAddItemModal({{ inv.id }})">
-                    <div class="inv-equipped-label">{{ slot_label }}</div>
-                    <div style="color:var(--text-muted);opacity:0.3;font-size:20px;">+</div>
+                <div class="inv-grid-slot" onclick="openAddItemModal({{ inv.id }})">
+                    <div class="inv-equipped-badge">{{ slot_label }}</div>
+                    <div class="inv-slot-empty-icon" style="font-size:14px;">+</div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            {% elif inv.inventory_type == 5 %}
+            <div class="inv-section-header">
+                <span>{{ inv.inventory_type | inv_label }}<span class="inv-meta">(ID: {{ inv.id }})</span></span>
+                {% if not is_online %}
+                <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
+                {% endif %}
+            </div>
+            {% set hotbar_max = inv.max_item_count or 10 %}
+            <div class="inv-hotbar">
+                {% for i in range(hotbar_max) %}
+                {% set slot_item = inv.item_list | selectattr('position_index', 'equalto', i) | first %}
+                {% if slot_item %}
+                <div class="inv-hotbar-slot has-item" onclick="openItemEditModal({{ slot_item.id }}, '{{ slot_item.template_id | escapejs }}', {{ slot_item.stack_size }}, {{ slot_item.quality_level or 0 }}, {{ slot_item.durability | default('null') }}, {{ slot_item.max_durability | default('null') }}, {{ slot_item.ammo | default('null') }}, {{ inv.id }})">
+                    <div class="inv-slot-icon">&#128230;</div>
+                    <div class="inv-slot-name" title="{{ slot_item.template_id }}">{{ slot_item.template_id | truncate(12) }}</div>
+                    {% if slot_item.stack_size and slot_item.stack_size > 1 %}
+                    <div class="inv-slot-stack">{{ slot_item.stack_size }}</div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="inv-hotbar-slot" onclick="openAddItemModal({{ inv.id }})">
+                    <div class="inv-slot-empty-icon">+</div>
                 </div>
                 {% endif %}
                 {% endfor %}
@@ -381,13 +413,13 @@
                 {% endif %}
             </div>
             {% if inv.item_list %}
-            <div class="inv-key-items">
+            <div class="inv-key-grid">
                 {% for item in inv.item_list %}
-                <div class="inv-key-item" onclick="openItemEditModal({{ item.id }}, '{{ item.template_id | escapejs }}', {{ item.stack_size }}, {{ item.quality_level or 0 }}, {{ item.durability | default('null') }}, {{ item.max_durability | default('null') }}, {{ item.ammo | default('null') }}, {{ inv.id }})">
+                <div class="inv-key-grid-slot" onclick="openItemEditModal({{ item.id }}, '{{ item.template_id | escapejs }}', {{ item.stack_size }}, {{ item.quality_level or 0 }}, {{ item.durability | default('null') }}, {{ item.max_durability | default('null') }}, {{ item.ammo | default('null') }}, {{ inv.id }})">
                     <div class="inv-slot-icon">&#128230;</div>
-                    <div class="inv-slot-name">{{ item.template_id }}</div>
+                    <div class="inv-slot-name" title="{{ item.template_id }}">{{ item.template_id | truncate(25) }}</div>
                     {% if item.stack_size and item.stack_size > 1 %}
-                    <span style="font-size:11px;color:var(--text-muted);">x{{ item.stack_size }}</span>
+                    <span class="inv-key-stack">x{{ item.stack_size }}</span>
                     {% endif %}
                 </div>
                 {% endfor %}
