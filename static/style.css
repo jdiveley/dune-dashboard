@@ -512,6 +512,14 @@ td a:hover { text-decoration: underline; }
     box-shadow: 0 0 0 2px rgba(201,162,78,0.2);
 }
 
+.inv-slot-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    cursor: pointer;
+    pointer-events: auto !important;
+}
+
 .inv-slot-icon {
     font-size: 22px;
     line-height: 1;
