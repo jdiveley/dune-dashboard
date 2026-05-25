@@ -130,4 +130,4 @@ if __name__ == '__main__':
     elif ssl_context:
         print("  HTTP redirect: Disabled (visit the HTTPS URL directly)\n")
 
-    socketio.run(app, host=host, port=port, debug=debug, log_output=False, ssl_context=ssl_context)
+    socketio.run(app, host=host, port=port, debug=debug, log_output=False, ssl_context=ssl_context, allow_unsafe_werkzeug=True)

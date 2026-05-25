@@ -1,0 +1,21 @@
+[Unit]
+Description=Dune Awakening Dashboard
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=jdiveley
+WorkingDirectory=/home/jdiveley/repos/github/dune-dashboard
+ExecStart=/bin/bash /home/jdiveley/repos/github/dune-dashboard/launch.sh
+Restart=on-failure
+RestartSec=5
+Environment=DUNE_ALLOW_INSECURE_REMOTE=1
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dune-dashboard
+
+[Install]
+WantedBy=multi-user.target
