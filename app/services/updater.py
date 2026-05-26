@@ -229,7 +229,8 @@ class UpdateService:
             return False, str(e)
 
     def _restart_app(self):
-        """Restart the dashboard via the launcher script to preserve SSH/DB tunnels."""
+        """Restart the dashboard. Under systemd, exit with code 1 so the service
+        manager restarts via launch.sh. On Windows, spawn a new launcher window."""
         try:
             if os.name == 'nt':
                 launcher = os.path.join(self.project_root, 'launcher.ps1')
@@ -240,12 +241,12 @@ class UpdateService:
                     )
                 else:
                     subprocess.Popen([sys.executable, os.path.join(self.project_root, 'run.py')], creationflags=subprocess.CREATE_NEW_CONSOLE)
+                os._exit(0)
             else:
-                launcher = os.path.join(self.project_root, 'start.sh')
-                if os.path.exists(launcher):
-                    subprocess.Popen(['bash', launcher], start_new_session=True)
-                else:
-                    subprocess.Popen([sys.executable, os.path.join(self.project_root, 'run.py')], start_new_session=True)
-            os._exit(0)
+                # Under systemd (Restart=on-failure), exiting with code 1 causes
+                # the service manager to restart the process via launch.sh cleanly.
+                # Spawning start.sh directly is wrong here — it's interactive and
+                # would run pkill commands that destroy the tunnel.
+                os._exit(1)
         except Exception as e:
             logger.error(f"Restart failed: {e}")

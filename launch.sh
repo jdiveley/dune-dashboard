@@ -1,23 +1,35 @@
 #!/bin/bash
 # Dune Dashboard - systemd launch wrapper
-# Sets up SSH tunnel + kubectl port-forward before starting the app.
+# Sets up SSH tunnel + kubectl port-forwards before starting the app.
 set -e
 
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
-SETTINGS="$PROJECT_ROOT/settings.yaml"
 PYTHON="$PROJECT_ROOT/.venv/bin/python3"
 SSH_KEY="/home/jdiveley/.ssh/dune-dashboard-key"
 SERVER_USER="dune"
 SERVER_HOST="192.168.250.200"
 DB_PORT="15433"
+DB_CLUSTER_PORT="15432"
 DIRECTOR_PORT="32479"
 
 SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=15 -o BatchMode=yes"
 
+# ── Helpers ──────────────────────────────────────────────────────────
+
+start_bgd_pf() {
+    ssh $SSH_OPTS "${SERVER_USER}@${SERVER_HOST}" \
+        "nohup sudo kubectl port-forward -n ${NAMESPACE} svc/${BGD_SVC} ${DIRECTOR_PORT}:11717 > /tmp/pf_bgd.log 2>&1 < /dev/null &" 2>/dev/null || true
+}
+
+bgd_port_alive() {
+    $PYTHON -c "import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', $DIRECTOR_PORT)); s.close()" 2>/dev/null
+}
+
 cleanup() {
-    echo "[launch] Cleaning up SSH tunnel..."
+    echo "[launch] Cleaning up..."
+    kill "$WATCHDOG_PID" 2>/dev/null || true
     kill "$TUNNEL_PID" 2>/dev/null || true
-    ssh $SSH_OPTS "${SERVER_USER}@${SERVER_HOST}" "pkill -f 'kubectl port-forward' 2>/dev/null; true" 2>/dev/null || true
+    ssh $SSH_OPTS "${SERVER_USER}@${SERVER_HOST}" "sudo pkill -f 'kubectl port-forward' 2>/dev/null; true" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -28,7 +40,6 @@ NAMESPACE=$(ssh $SSH_OPTS "${SERVER_USER}@${SERVER_HOST}" \
 
 if [ -z "$NAMESPACE" ]; then
     echo "[launch] WARNING: Could not detect namespace. DB port-forward will be skipped."
-    echo "[launch] The app will start but DB features will be unavailable until the tunnel is up."
 else
     echo "[launch] Namespace: $NAMESPACE"
 fi
@@ -44,7 +55,6 @@ ssh $SSH_OPTS \
     -N "${SERVER_USER}@${SERVER_HOST}" &
 TUNNEL_PID=$!
 
-# Wait for tunnel to be alive
 for i in $(seq 1 20); do
     sleep 1
     if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
@@ -57,27 +67,23 @@ for i in $(seq 1 20); do
     fi
 done
 
-# ── 3. kubectl port-forward on remote VM ────────────────────────────
+# ── 3. kubectl port-forwards on remote VM ────────────────────────────
 if [ -n "$NAMESPACE" ]; then
-    echo "[launch] Starting kubectl port-forward on VM..."
-    # Discover service names dynamically (they don't carry the full namespace prefix)
+    echo "[launch] Starting kubectl port-forwards on VM..."
+
     DB_SVC=$(ssh $SSH_OPTS "${SERVER_USER}@${SERVER_HOST}" \
         "sudo kubectl get svc -n ${NAMESPACE} -o name 2>/dev/null | grep 'db-dbdepl-svc' | sed 's|service/||'" 2>/dev/null || true)
     BGD_SVC=$(ssh $SSH_OPTS "${SERVER_USER}@${SERVER_HOST}" \
         "sudo kubectl get svc -n ${NAMESPACE} -o name 2>/dev/null | grep 'bgd-svc' | sed 's|service/||'" 2>/dev/null || true)
 
-    # DB cluster port is 15432, we forward to local 15433
-    DB_CLUSTER_PORT="15432"
-
-    # Kill any stale port-forwards first
-    ssh $SSH_OPTS "${SERVER_USER}@${SERVER_HOST}" "pkill -9 -f 'kubectl port-forward' 2>/dev/null; true" 2>/dev/null || true
+    # Kill any stale port-forwards (sudo so we can kill root-owned processes)
+    ssh $SSH_OPTS "${SERVER_USER}@${SERVER_HOST}" "sudo pkill -9 -f 'kubectl port-forward' 2>/dev/null; true" 2>/dev/null || true
     sleep 2
 
-    # Start each port-forward in its own SSH session so stdin detaches cleanly
+    # Each port-forward gets its own SSH session so stdin detaches cleanly
     ssh $SSH_OPTS "${SERVER_USER}@${SERVER_HOST}" \
         "nohup sudo kubectl port-forward -n ${NAMESPACE} svc/${DB_SVC} ${DB_PORT}:${DB_CLUSTER_PORT} > /tmp/pf_db.log 2>&1 < /dev/null &" 2>/dev/null || true
-    ssh $SSH_OPTS "${SERVER_USER}@${SERVER_HOST}" \
-        "nohup sudo kubectl port-forward -n ${NAMESPACE} svc/${BGD_SVC} ${DIRECTOR_PORT}:11717 > /tmp/pf_bgd.log 2>&1 < /dev/null &" 2>/dev/null || true
+    start_bgd_pf
 
     echo "[launch] Waiting for DB to be reachable on port $DB_PORT..."
     for i in $(seq 1 30); do
@@ -87,9 +93,28 @@ if [ -n "$NAMESPACE" ]; then
             break
         fi
     done
+
+    # ── 4. BGD watchdog ──────────────────────────────────────────────
+    # Runs in background alongside Flask; restarts BGD port-forward if it dies.
+    (
+        while true; do
+            sleep 30
+            if ! bgd_port_alive; then
+                echo "[launch] BGD port-forward down, restarting..."
+                start_bgd_pf
+                sleep 5
+                if bgd_port_alive; then
+                    echo "[launch] BGD port-forward restored."
+                else
+                    echo "[launch] BGD port-forward restart failed, will retry."
+                fi
+            fi
+        done
+    ) &
+    WATCHDOG_PID=$!
 fi
 
-# ── 4. Start app ─────────────────────────────────────────────────────
+# ── 5. Start app ──────────────────────────────────────────────────────
 echo "[launch] Starting dashboard..."
 cd "$PROJECT_ROOT"
 exec $PYTHON run.py
