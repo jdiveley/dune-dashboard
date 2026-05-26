@@ -25,6 +25,7 @@ from app.services.admin import AdminService
 from app.services.updater import UpdateService
 from app.services.director import DirectorService
 from app.services.scheduled_restart import ScheduledRestartService
+from app.services.backup import BackupService
 from app.utils.cache import MultiCache
 from app.routes.main import register_routes
 from app.routes.api import register_api_routes
@@ -247,6 +248,11 @@ def create_app(settings_path=None):
         settings=settings,
     )
 
+    backup_svc = BackupService(
+        db_config=db_config,
+        backup_dir=os.path.join(base_dir, 'backups', 'db'),
+    )
+
     services = {
         'db': db_service,
         'ssh': ssh_service,
@@ -259,6 +265,7 @@ def create_app(settings_path=None):
         'updater': updater_svc,
         'director': director_svc,
         'scheduler': scheduler_svc,
+        'backup': backup_svc,
     }
     logging.debug(f"All services registered: {list(services.keys())}")
 

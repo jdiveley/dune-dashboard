@@ -1299,6 +1299,44 @@ def register_api_routes(app, services, settings):
 
         return jsonify({'success': True})
 
+    # Backup API
+    backup_svc = services.get('backup')
+
+    @app.route('/api/backups', methods=['GET'])
+    @auth_req
+    @limiter.limit("60 per hour")
+    def list_backups():
+        if not backup_svc:
+            return jsonify({'success': False, 'error': 'Backup service unavailable'})
+        return jsonify({
+            'success': True,
+            'backups': backup_svc.list_backups(),
+            'in_progress': backup_svc.in_progress,
+            'last_status': backup_svc.last_status,
+        })
+
+    @app.route('/api/backup/create', methods=['POST'])
+    @auth_req
+    @limiter.limit("10 per hour")
+    def create_backup():
+        if not backup_svc:
+            return jsonify({'success': False, 'error': 'Backup service unavailable'})
+        ok, msg = backup_svc.create_backup_async()
+        if ok and audit_svc:
+            audit_svc.log('db_backup_created', {}, user='admin', severity='info')
+        return jsonify({'success': ok, 'message': msg})
+
+    @app.route('/api/backup/<filename>', methods=['DELETE'])
+    @auth_req
+    @limiter.limit("60 per hour")
+    def delete_backup(filename):
+        if not backup_svc:
+            return jsonify({'success': False, 'error': 'Backup service unavailable'})
+        ok, msg = backup_svc.delete_backup(filename)
+        if ok and audit_svc:
+            audit_svc.log('db_backup_deleted', {'filename': filename}, user='admin', severity='info')
+        return jsonify({'success': ok, 'message': msg})
+
     # Settings API - get and update dashboard settings
     @app.route('/api/settings', methods=['GET'])
     @login_required

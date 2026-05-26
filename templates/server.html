@@ -260,6 +260,20 @@
 </div>
 
 <div class="card">
+    <div class="card-header" style="cursor:pointer;" onclick="document.getElementById('backup-section').classList.toggle('hidden');">
+        <span>Database Backups</span>
+        <span id="backup-status-label" style="font-size:12px;color:var(--text-muted);">Loading...</span>
+    </div>
+    <div class="card-body" id="backup-section">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <button id="backup-create-btn" style="padding:8px 20px;background:#27ae60;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Create Backup</button>
+            <span id="backup-create-result" style="font-size:13px;color:var(--text-muted);"></span>
+        </div>
+        <div id="backup-list"></div>
+    </div>
+</div>
+
+<div class="card">
     <div class="card-header">Pod Status</div>
     <div class="card-body">
         <button id="refresh-pods" style="padding:8px 16px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Refresh Pods</button>
@@ -889,5 +903,99 @@ document.getElementById('add-sched-btn')?.addEventListener('click', async functi
 loadSchedules();
 // Refresh countdown every 30 seconds
 setInterval(loadSchedules, 30000);
+
+// ── Backups ──────────────────────────────────────────────────────────
+function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+async function loadBackups() {
+    try {
+        const resp = await fetch('/api/backups');
+        const data = await resp.json();
+        if (!data.success) return;
+
+        const label = document.getElementById('backup-status-label');
+        const list = document.getElementById('backup-list');
+
+        if (data.in_progress) {
+            label.textContent = 'Backup in progress...';
+            label.style.color = '#f39c12';
+        } else if (data.last_status && !data.last_status.success) {
+            label.textContent = 'Last backup failed: ' + data.last_status.error;
+            label.style.color = 'var(--danger)';
+        } else {
+            label.textContent = data.backups.length + ' backup(s) stored locally';
+            label.style.color = 'var(--text-muted)';
+        }
+
+        if (data.backups.length === 0) {
+            list.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">No backups yet.</div>';
+            return;
+        }
+
+        list.innerHTML = data.backups.map(b => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#1a1a2e;border-radius:6px;margin-bottom:6px;font-size:13px;">
+                <div>
+                    <span style="color:#e0d5c7;font-family:monospace;">${b.filename}</span>
+                    <span style="color:var(--text-muted);margin-left:12px;">${formatBytes(b.size)}</span>
+                    <span style="color:var(--text-muted);margin-left:12px;">${new Date(b.created_at).toLocaleString()}</span>
+                </div>
+                <button onclick="deleteBackup('${b.filename}')" style="padding:4px 12px;background:#c0392b;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Delete</button>
+            </div>
+        `).join('');
+    } catch(e) {}
+}
+
+async function deleteBackup(filename) {
+    if (!confirm('Delete backup ' + filename + '?')) return;
+    try {
+        const resp = await csrfFetch('/api/backup/' + encodeURIComponent(filename), {method: 'DELETE'});
+        const data = await resp.json();
+        if (data.success) loadBackups();
+        else alert('Delete failed: ' + (data.message || data.error));
+    } catch(e) { alert('Error: ' + e.message); }
+}
+
+document.getElementById('backup-create-btn')?.addEventListener('click', async function() {
+    const result = document.getElementById('backup-create-result');
+    this.disabled = true;
+    result.style.color = 'var(--text-muted)';
+    result.textContent = 'Starting backup...';
+    try {
+        const resp = await csrfFetch('/api/backup/create', {method: 'POST'});
+        const data = await resp.json();
+        if (data.success) {
+            result.style.color = 'var(--success)';
+            result.textContent = 'Backup running in background...';
+            // Poll until done
+            const poll = setInterval(async () => {
+                const r = await fetch('/api/backups');
+                const d = await r.json();
+                if (d.success && !d.in_progress) {
+                    clearInterval(poll);
+                    loadBackups();
+                    result.textContent = d.last_status?.success
+                        ? 'Backup complete: ' + d.last_status.filename
+                        : 'Backup failed: ' + d.last_status?.error;
+                    result.style.color = d.last_status?.success ? 'var(--success)' : 'var(--danger)';
+                    document.getElementById('backup-create-btn').disabled = false;
+                }
+            }, 3000);
+        } else {
+            result.style.color = 'var(--danger)';
+            result.textContent = data.message || 'Failed to start backup';
+            this.disabled = false;
+        }
+    } catch(e) {
+        result.style.color = 'var(--danger)';
+        result.textContent = 'Error: ' + e.message;
+        this.disabled = false;
+    }
+});
+
+loadBackups();
 </script>
 {% endblock %}
