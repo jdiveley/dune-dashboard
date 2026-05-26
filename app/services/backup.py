@@ -1,9 +1,8 @@
-"""Database backup service - creates pg_dump backups stored locally"""
+"""Database backup service - pg_dump via kubectl exec, streamed over SSH"""
 
 import gzip
 import logging
 import os
-import subprocess
 import threading
 from datetime import datetime
 
@@ -13,7 +12,9 @@ MAX_BACKUPS = 10
 
 
 class BackupService:
-    def __init__(self, db_config, backup_dir):
+    def __init__(self, ssh_service, k8s_service, db_config, backup_dir):
+        self.ssh = ssh_service
+        self.k8s = k8s_service
         self.db_config = db_config
         self.backup_dir = backup_dir
         self._in_progress = False
@@ -42,37 +43,31 @@ class BackupService:
         filepath = os.path.join(self.backup_dir, filename)
 
         try:
-            env = os.environ.copy()
-            env['PGPASSWORD'] = self.db_config.get('password', '')
+            pod = self.k8s.find_pod_by_pattern('db-dbdepl-sts')
+            if not pod:
+                raise RuntimeError("Could not find database pod")
 
-            cmd = [
-                'pg_dump',
-                '-h', str(self.db_config.get('host', 'localhost')),
-                '-p', str(self.db_config.get('port', 15433)),
-                '-U', self.db_config.get('user', 'dune'),
-                self.db_config.get('database', 'dune'),
-            ]
-
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=env,
-                timeout=600,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(result.stderr.decode().strip())
+            db_user = self.db_config.get('user', 'dune')
+            db_name = self.db_config.get('database', 'dune')
+            namespace = self.k8s.namespace
+            cmd = f"sudo kubectl exec -n {namespace} {pod} -- pg_dump -U {db_user} {db_name}"
 
             with gzip.open(filepath, 'wb') as gz:
-                gz.write(result.stdout)
+                err, rc = self.ssh.run_streaming(cmd, gz, timeout=600)
+
+            if rc != 0:
+                raise RuntimeError(err.strip() or f"pg_dump exited with code {rc}")
 
             size = os.path.getsize(filepath)
+            if size == 0:
+                raise RuntimeError("Backup produced an empty file")
+
             self._last_status = {'success': True, 'filename': filename, 'size': size}
-            logger.info(f"Backup created: {filename} ({size:,} bytes)")
+            logger.info("Backup created: %s (%s bytes)", filename, f"{size:,}")
             self._cleanup_old_backups()
 
         except Exception as e:
-            logger.error(f"Backup failed: {e}")
+            logger.error("Backup failed: %s", e)
             self._last_status = {'success': False, 'error': str(e)}
             if os.path.exists(filepath):
                 os.remove(filepath)
@@ -80,13 +75,12 @@ class BackupService:
             self._in_progress = False
 
     def _cleanup_old_backups(self):
-        backups = self.list_backups()
-        for old in backups[MAX_BACKUPS:]:
+        for old in self.list_backups()[MAX_BACKUPS:]:
             try:
                 os.remove(os.path.join(self.backup_dir, old['filename']))
-                logger.info(f"Removed old backup: {old['filename']}")
+                logger.info("Removed old backup: %s", old['filename'])
             except Exception as e:
-                logger.warning(f"Failed to remove old backup {old['filename']}: {e}")
+                logger.warning("Failed to remove old backup %s: %s", old['filename'], e)
 
     def list_backups(self):
         backups = []
@@ -102,7 +96,7 @@ class BackupService:
                     'created_at': datetime.fromtimestamp(stat.st_mtime).isoformat(),
                 })
         except Exception as e:
-            logger.error(f"Failed to list backups: {e}")
+            logger.error("Failed to list backups: %s", e)
         return sorted(backups, key=lambda x: x['created_at'], reverse=True)
 
     def delete_backup(self, filename):

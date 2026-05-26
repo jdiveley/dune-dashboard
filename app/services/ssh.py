@@ -111,6 +111,38 @@ class SSHService:
             self._client = None
             return '', str(ex), -1
 
+    def run_streaming(self, command, file_obj, timeout=600):
+        """Execute a remote command and stream stdout in chunks to a file object.
+
+        Avoids loading large outputs (e.g. pg_dump) into memory all at once.
+
+        Args:
+            command: The shell command to execute.
+            file_obj: A writable binary file object to receive stdout.
+            timeout: Maximum time in seconds for the command.
+
+        Returns:
+            Tuple of (stderr, return_code).
+        """
+        logger.debug("SSH streaming: %s", command[:150])
+        try:
+            client = self._get_client()
+            _, stdout, stderr = client.exec_command(command, timeout=timeout)
+            while True:
+                chunk = stdout.read(65536)
+                if not chunk:
+                    break
+                file_obj.write(chunk)
+            err = stderr.read().decode('utf-8', errors='replace')
+            rc = stdout.channel.recv_exit_status()
+            if rc != 0:
+                logger.warning("SSH streaming command failed (rc=%d): %s", rc, err[:200])
+            return err, rc
+        except Exception as ex:
+            logger.error("SSH streaming error: %s", ex)
+            self._client = None
+            return str(ex), -1
+
     def check_connection(self):
         """Test SSH connectivity with a simple echo command.
 

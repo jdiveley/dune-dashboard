@@ -249,6 +249,8 @@ def create_app(settings_path=None):
     )
 
     backup_svc = BackupService(
+        ssh_service=ssh_service,
+        k8s_service=k8s_service,
         db_config=db_config,
         backup_dir=os.path.join(base_dir, 'backups', 'db'),
     )
