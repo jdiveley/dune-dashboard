@@ -222,12 +222,12 @@
                         <input type="text" id="new-label" maxlength="64" placeholder="Daily restart" style="width:100%;box-sizing:border-box;padding:8px;background:#252540;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
                     </div>
                     <div>
-                        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Time (UTC, 24h)</label>
+                        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Time (local, 24h)</label>
                         <input type="text" id="new-time" value="06:00" placeholder="06:00" maxlength="5" style="width:100%;box-sizing:border-box;padding:8px;background:#252540;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
                     </div>
                 </div>
                 <div style="margin-bottom:12px;">
-                    <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px;">Days (UTC)</label>
+                    <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px;">Days</label>
                     <div id="new-days" style="display:flex;gap:8px;flex-wrap:wrap;">
                         <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" value="mon" checked> Mon</label>
                         <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" value="tue" checked> Tue</label>
@@ -756,7 +756,7 @@ async function loadSchedules() {
         const label = document.getElementById('sched-next-label');
         if (data.upcoming && data.upcoming.length > 0) {
             const next = data.upcoming[0];
-            label.textContent = 'Next: ' + next.label + ' in ' + fmtCountdown(next.seconds_until) + ' (UTC ' + next.next_utc.slice(11,16) + ')';
+            label.textContent = 'Next: ' + next.label + ' in ' + fmtCountdown(next.seconds_until) + ' (' + next.next_local.slice(11,16) + ' local)';
             label.style.color = next.seconds_until < 1800 ? 'var(--warning, #f39c12)' : 'var(--success)';
         } else {
             label.textContent = data.schedules && data.schedules.length ? 'No upcoming (check days/time)' : 'No schedules';
@@ -775,7 +775,7 @@ async function loadSchedules() {
         list.innerHTML = '<table style="width:100%;font-size:13px;border-collapse:collapse;">' +
             '<thead><tr style="color:var(--text-muted);text-align:left;">' +
             '<th style="padding:6px 8px;">Label</th>' +
-            '<th style="padding:6px 8px;">Time (UTC)</th>' +
+            '<th style="padding:6px 8px;">Time</th>' +
             '<th style="padding:6px 8px;">Days</th>' +
             '<th style="padding:6px 8px;">Next</th>' +
             '<th style="padding:6px 8px;">Status</th>' +

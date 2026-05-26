@@ -41,7 +41,7 @@ class ScheduledRestartService:
         if not schedules:
             return
 
-        now = datetime.utcnow()
+        now = datetime.now()
         today = now.strftime('%Y-%m-%d')
 
         # Prune fired entries older than today
@@ -142,7 +142,7 @@ class ScheduledRestartService:
     def get_upcoming(self):
         """Return a list of upcoming restart times, sorted soonest first."""
         schedules = self.settings.get('battlegroup', {}).get('scheduled_restarts', [])
-        now = datetime.utcnow()
+        now = datetime.now()
         upcoming = []
 
         for i, sched in enumerate(schedules):
@@ -167,7 +167,7 @@ class ScheduledRestartService:
                     upcoming.append({
                         'id': sched.get('id', str(i)),
                         'label': sched.get('label', f'Schedule {i+1}'),
-                        'next_utc': candidate.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                        'next_local': candidate.strftime('%Y-%m-%dT%H:%M:%S'),
                         'seconds_until': int((candidate - now).total_seconds()),
                     })
                     break
