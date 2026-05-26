@@ -44,6 +44,13 @@ DEFAULTS = {
         'namespace': '',
         'battlegroup_script': '/home/dune/.dune/bin/battlegroup',
     },
+    'battlegroup': {
+        'scheduled_restarts': [],
+        # Optional SSH command template for in-game broadcast.
+        # Use {message} as placeholder, e.g.:
+        #   sudo kubectl exec -n <ns> <pod> -- /app/rcon broadcast {message}
+        'broadcast_command': '',
+    },
     'director': {
         'port': 32479,
     },

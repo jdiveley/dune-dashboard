@@ -24,6 +24,7 @@ from app.services.chat import ChatService
 from app.services.admin import AdminService
 from app.services.updater import UpdateService
 from app.services.director import DirectorService
+from app.services.scheduled_restart import ScheduledRestartService
 from app.utils.cache import MultiCache
 from app.routes.main import register_routes
 from app.routes.api import register_api_routes
@@ -240,6 +241,12 @@ def create_app(settings_path=None):
     )
     logging.debug(f"DirectorService initialized: port={settings.get('director', {}).get('port', 32479)}")
 
+    scheduler_svc = ScheduledRestartService(
+        ssh_service=ssh_service,
+        chat_service=chat_svc,
+        settings=settings,
+    )
+
     services = {
         'db': db_service,
         'ssh': ssh_service,
@@ -251,6 +258,7 @@ def create_app(settings_path=None):
         'static_cache': static_cache,
         'updater': updater_svc,
         'director': director_svc,
+        'scheduler': scheduler_svc,
     }
     logging.debug(f"All services registered: {list(services.keys())}")
 
@@ -258,6 +266,7 @@ def create_app(settings_path=None):
     from app.services.audit import AuditService
     audit_svc = AuditService()
     services['audit'] = audit_svc
+    scheduler_svc.audit = audit_svc
 
     # Track start time for uptime calculation
     import time
@@ -283,6 +292,9 @@ def create_app(settings_path=None):
 
     # Start update checker
     updater_svc.start_checker()
+
+    # Start scheduled restart service
+    scheduler_svc.start()
 
     @app.teardown_appcontext
     def cleanup_db(exc):

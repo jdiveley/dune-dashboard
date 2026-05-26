@@ -1160,6 +1160,145 @@ def register_api_routes(app, services, settings):
         status_code = 200 if health['status'] == 'healthy' else 503
         return jsonify(health), status_code
 
+    # Scheduled restarts
+    scheduler_svc = services.get('scheduler')
+
+    @app.route('/api/scheduled_restarts', methods=['GET'])
+    @auth_req
+    def get_scheduled_restarts():
+        schedules = settings.get('battlegroup', {}).get('scheduled_restarts', [])
+        upcoming = scheduler_svc.get_upcoming() if scheduler_svc else []
+        return jsonify({'success': True, 'schedules': schedules, 'upcoming': upcoming})
+
+    @app.route('/api/scheduled_restarts', methods=['POST'])
+    @auth_req
+    @limiter.limit("100 per hour")
+    def create_scheduled_restart():
+        import uuid as _uuid
+        data = request.get_json() or {}
+        time_str = data.get('time', '06:00').strip()
+        try:
+            h, m = map(int, time_str.split(':'))
+            if not (0 <= h <= 23 and 0 <= m <= 59):
+                raise ValueError
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid time — use HH:MM (UTC)'})
+
+        valid_days = {'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'}
+        days = [d.lower() for d in data.get('days', list(valid_days)) if d.lower() in valid_days]
+        if not days:
+            return jsonify({'success': False, 'error': 'At least one day required'})
+
+        warn_minutes = data.get('warn_minutes', [30, 15, 5, 1])
+        if not isinstance(warn_minutes, list):
+            warn_minutes = [30, 15, 5, 1]
+        warn_minutes = [int(w) for w in warn_minutes if isinstance(w, (int, float)) and 1 <= w <= 1440]
+
+        new_sched = {
+            'id': _uuid.uuid4().hex[:8],
+            'label': str(data.get('label', ''))[:64] or f'Restart at {time_str} UTC',
+            'enabled': bool(data.get('enabled', True)),
+            'time': f'{h:02d}:{m:02d}',
+            'days': days,
+            'warn_minutes': sorted(set(warn_minutes), reverse=True),
+            'message_template': str(data.get('message_template', '[Server] Restarting in {minutes} minutes.'))[:200],
+            'restart_message': str(data.get('restart_message', '[Server] Restarting now. Back shortly!'))[:200],
+        }
+
+        settings.setdefault('battlegroup', {}).setdefault('scheduled_restarts', []).append(new_sched)
+        from app.config import save_settings
+        save_settings(settings)
+
+        if audit_svc:
+            audit_svc.log('scheduled_restart_created', {'id': new_sched['id'], 'time': new_sched['time']}, user='admin', severity='info')
+
+        return jsonify({'success': True, 'schedule': new_sched})
+
+    @app.route('/api/scheduled_restarts/<sched_id>', methods=['PUT'])
+    @auth_req
+    @limiter.limit("100 per hour")
+    def update_scheduled_restart(sched_id):
+        data = request.get_json() or {}
+        schedules = settings.get('battlegroup', {}).get('scheduled_restarts', [])
+        sched = next((s for s in schedules if s.get('id') == sched_id), None)
+        if not sched:
+            return jsonify({'success': False, 'error': 'Schedule not found'})
+
+        if 'time' in data:
+            try:
+                h, m = map(int, data['time'].split(':'))
+                if not (0 <= h <= 23 and 0 <= m <= 59):
+                    raise ValueError
+                sched['time'] = f'{h:02d}:{m:02d}'
+            except ValueError:
+                return jsonify({'success': False, 'error': 'Invalid time — use HH:MM (UTC)'})
+
+        valid_days = {'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'}
+        if 'days' in data:
+            days = [d.lower() for d in data['days'] if d.lower() in valid_days]
+            if not days:
+                return jsonify({'success': False, 'error': 'At least one day required'})
+            sched['days'] = days
+
+        if 'enabled' in data:
+            sched['enabled'] = bool(data['enabled'])
+        if 'label' in data:
+            sched['label'] = str(data['label'])[:64]
+        if 'message_template' in data:
+            sched['message_template'] = str(data['message_template'])[:200]
+        if 'restart_message' in data:
+            sched['restart_message'] = str(data['restart_message'])[:200]
+        if 'warn_minutes' in data and isinstance(data['warn_minutes'], list):
+            wm = [int(w) for w in data['warn_minutes'] if isinstance(w, (int, float)) and 1 <= w <= 1440]
+            sched['warn_minutes'] = sorted(set(wm), reverse=True)
+
+        from app.config import save_settings
+        save_settings(settings)
+
+        if audit_svc:
+            audit_svc.log('scheduled_restart_updated', {'id': sched_id}, user='admin', severity='info')
+
+        return jsonify({'success': True, 'schedule': sched})
+
+    @app.route('/api/scheduled_restarts/<sched_id>', methods=['DELETE'])
+    @auth_req
+    @limiter.limit("100 per hour")
+    def delete_scheduled_restart(sched_id):
+        schedules = settings.get('battlegroup', {}).get('scheduled_restarts', [])
+        before = len(schedules)
+        settings['battlegroup']['scheduled_restarts'] = [s for s in schedules if s.get('id') != sched_id]
+        if len(settings['battlegroup']['scheduled_restarts']) == before:
+            return jsonify({'success': False, 'error': 'Schedule not found'})
+
+        from app.config import save_settings
+        save_settings(settings)
+
+        if audit_svc:
+            audit_svc.log('scheduled_restart_deleted', {'id': sched_id}, user='admin', severity='info')
+
+        return jsonify({'success': True})
+
+    @app.route('/api/battlegroup/broadcast', methods=['POST'])
+    @auth_req
+    @limiter.limit("60 per hour")
+    def battlegroup_broadcast():
+        data = request.get_json() or {}
+        message = str(data.get('message', '')).strip()
+        if not message:
+            return jsonify({'success': False, 'error': 'Message is required'})
+        if len(message) > 500:
+            return jsonify({'success': False, 'error': 'Message too long (max 500 chars)'})
+
+        if scheduler_svc:
+            scheduler_svc.send_manual_broadcast(message)
+        else:
+            chat_svc.save_message(channel='System', sender='SYSTEM', message=message, is_admin=True)
+
+        if audit_svc:
+            audit_svc.log('battlegroup_broadcast', {'message': message[:80]}, user='admin', severity='info')
+
+        return jsonify({'success': True})
+
     # Settings API - get and update dashboard settings
     @app.route('/api/settings', methods=['GET'])
     @login_required

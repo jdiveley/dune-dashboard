@@ -191,6 +191,75 @@
 </div>
 
 <div class="card">
+    <div class="card-header">
+        <span>Broadcast Message</span>
+        <span style="font-size:12px;color:var(--text-muted);">Saves to Dashboard Chat; in-game delivery requires <code>battlegroup.broadcast_command</code> in settings.yaml</span>
+    </div>
+    <div class="card-body">
+        <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">
+            <input type="text" id="broadcast-msg" maxlength="500" placeholder="Enter server announcement..." style="flex:1;min-width:220px;padding:9px 12px;background:#1a1a2e;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
+            <button id="broadcast-btn" style="padding:9px 20px;background:#e67e22;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;">Send Broadcast</button>
+        </div>
+        <div id="broadcast-result" style="margin-top:8px;font-size:13px;display:none;"></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header" style="cursor:pointer;" onclick="document.getElementById('sched-section').classList.toggle('hidden');">
+        <span>Scheduled Restarts</span>
+        <span id="sched-next-label" style="font-size:12px;color:var(--text-muted);">Loading...</span>
+    </div>
+    <div class="card-body" id="sched-section">
+
+        <div id="sched-list" style="margin-bottom:16px;"></div>
+
+        <details style="margin-bottom:4px;">
+            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary);padding:4px 0;user-select:none;">+ Add Schedule</summary>
+            <div style="margin-top:12px;padding:16px;background:#1a1a2e;border-radius:8px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                    <div>
+                        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Label</label>
+                        <input type="text" id="new-label" maxlength="64" placeholder="Daily restart" style="width:100%;box-sizing:border-box;padding:8px;background:#252540;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
+                    </div>
+                    <div>
+                        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Time (UTC, 24h)</label>
+                        <input type="text" id="new-time" value="06:00" placeholder="06:00" maxlength="5" style="width:100%;box-sizing:border-box;padding:8px;background:#252540;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
+                    </div>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px;">Days (UTC)</label>
+                    <div id="new-days" style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" value="mon" checked> Mon</label>
+                        <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" value="tue" checked> Tue</label>
+                        <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" value="wed" checked> Wed</label>
+                        <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" value="thu" checked> Thu</label>
+                        <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" value="fri" checked> Fri</label>
+                        <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" value="sat" checked> Sat</label>
+                        <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" value="sun" checked> Sun</label>
+                    </div>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Warning intervals (comma-separated minutes before restart)</label>
+                    <input type="text" id="new-warn" value="30, 15, 5, 1" placeholder="30, 15, 5, 1" style="width:100%;box-sizing:border-box;padding:8px;background:#252540;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Warning message template (<code>{minutes}</code> is replaced)</label>
+                    <input type="text" id="new-msg-template" value="[Server] Restarting in {minutes} minutes." maxlength="200" style="width:100%;box-sizing:border-box;padding:8px;background:#252540;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
+                </div>
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Restart message</label>
+                    <input type="text" id="new-restart-msg" value="[Server] Restarting now. Back shortly!" maxlength="200" style="width:100%;box-sizing:border-box;padding:8px;background:#252540;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <button id="add-sched-btn" style="padding:8px 20px;background:#27ae60;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Save Schedule</button>
+                    <span id="add-sched-result" style="font-size:13px;"></span>
+                </div>
+            </div>
+        </details>
+    </div>
+</div>
+
+<div class="card">
     <div class="card-header">Pod Status</div>
     <div class="card-body">
         <button id="refresh-pods" style="padding:8px 16px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Refresh Pods</button>
@@ -628,5 +697,197 @@ debugToggle.addEventListener('change', async function() {
 
 // Load debug status on page load
 loadDebugStatus();
+
+// Broadcast
+document.getElementById('broadcast-btn')?.addEventListener('click', async function() {
+    const msg = document.getElementById('broadcast-msg').value.trim();
+    const result = document.getElementById('broadcast-result');
+    if (!msg) {
+        result.style.display = 'block';
+        result.style.color = 'var(--danger)';
+        result.textContent = 'Enter a message first.';
+        return;
+    }
+    this.disabled = true;
+    this.textContent = 'Sending...';
+    result.style.display = 'none';
+    try {
+        const resp = await csrfFetch('/api/battlegroup/broadcast', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: msg}),
+        });
+        const data = await resp.json();
+        result.style.display = 'block';
+        if (data.success) {
+            result.style.color = 'var(--success)';
+            result.textContent = 'Broadcast sent and saved to Dashboard Chat.';
+            document.getElementById('broadcast-msg').value = '';
+        } else {
+            result.style.color = 'var(--danger)';
+            result.textContent = 'Error: ' + (data.error || 'Failed');
+        }
+    } catch (e) {
+        result.style.display = 'block';
+        result.style.color = 'var(--danger)';
+        result.textContent = 'Error: ' + e.message;
+    }
+    this.disabled = false;
+    this.textContent = 'Send Broadcast';
+});
+
+// Scheduled restarts
+const DAY_ORDER = ['mon','tue','wed','thu','fri','sat','sun'];
+const DAY_LABELS = {mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
+
+function fmtCountdown(seconds) {
+    if (seconds < 60) return seconds + 's';
+    if (seconds < 3600) return Math.floor(seconds/60) + 'm ' + (seconds%60) + 's';
+    const h = Math.floor(seconds/3600), m = Math.floor((seconds%3600)/60);
+    return h + 'h ' + m + 'm';
+}
+
+async function loadSchedules() {
+    try {
+        const resp = await fetch('/api/scheduled_restarts');
+        const data = await resp.json();
+        if (!data.success) return;
+
+        const label = document.getElementById('sched-next-label');
+        if (data.upcoming && data.upcoming.length > 0) {
+            const next = data.upcoming[0];
+            label.textContent = 'Next: ' + next.label + ' in ' + fmtCountdown(next.seconds_until) + ' (UTC ' + next.next_utc.slice(11,16) + ')';
+            label.style.color = next.seconds_until < 1800 ? 'var(--warning, #f39c12)' : 'var(--success)';
+        } else {
+            label.textContent = data.schedules && data.schedules.length ? 'No upcoming (check days/time)' : 'No schedules';
+            label.style.color = 'var(--text-muted)';
+        }
+
+        const list = document.getElementById('sched-list');
+        if (!data.schedules || data.schedules.length === 0) {
+            list.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No scheduled restarts configured.</p>';
+            return;
+        }
+
+        const upcoming = {};
+        (data.upcoming || []).forEach(u => { upcoming[u.id] = u; });
+
+        list.innerHTML = '<table style="width:100%;font-size:13px;border-collapse:collapse;">' +
+            '<thead><tr style="color:var(--text-muted);text-align:left;">' +
+            '<th style="padding:6px 8px;">Label</th>' +
+            '<th style="padding:6px 8px;">Time (UTC)</th>' +
+            '<th style="padding:6px 8px;">Days</th>' +
+            '<th style="padding:6px 8px;">Next</th>' +
+            '<th style="padding:6px 8px;">Status</th>' +
+            '<th style="padding:6px 8px;">Actions</th>' +
+            '</tr></thead><tbody>' +
+            data.schedules.map(s => {
+                const u = upcoming[s.id];
+                const nextStr = u ? fmtCountdown(u.seconds_until) : '—';
+                const statusColor = s.enabled ? 'var(--success)' : 'var(--text-muted)';
+                const statusText = s.enabled ? 'Enabled' : 'Disabled';
+                const days = (s.days || DAY_ORDER).map(d => DAY_LABELS[d] || d).join(', ');
+                return '<tr style="border-top:1px solid #333;">' +
+                    '<td style="padding:8px;">' + (s.label || s.id) + '</td>' +
+                    '<td style="padding:8px;font-family:monospace;">' + s.time + '</td>' +
+                    '<td style="padding:8px;font-size:11px;">' + days + '</td>' +
+                    '<td style="padding:8px;font-size:11px;color:var(--text-muted);">' + nextStr + '</td>' +
+                    '<td style="padding:8px;color:' + statusColor + ';font-weight:600;">' + statusText + '</td>' +
+                    '<td style="padding:8px;display:flex;gap:6px;">' +
+                    '<button class="sched-toggle-btn" data-id="' + s.id + '" data-enabled="' + s.enabled + '" ' +
+                        'style="padding:3px 10px;font-size:12px;background:' + (s.enabled ? '#555' : '#27ae60') + ';color:#fff;border:none;border-radius:4px;cursor:pointer;">' +
+                        (s.enabled ? 'Disable' : 'Enable') + '</button>' +
+                    '<button class="sched-del-btn" data-id="' + s.id + '" data-label="' + (s.label || s.id) + '" ' +
+                        'style="padding:3px 10px;font-size:12px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;">Delete</button>' +
+                    '</td></tr>';
+            }).join('') +
+            '</tbody></table>';
+
+        document.querySelectorAll('.sched-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const id = this.dataset.id;
+                const nowEnabled = this.dataset.enabled === 'true';
+                this.disabled = true;
+                try {
+                    const resp = await csrfFetch('/api/scheduled_restarts/' + id, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({enabled: !nowEnabled}),
+                    });
+                    const data = await resp.json();
+                    if (data.success) loadSchedules();
+                    else alert('Error: ' + (data.error || 'Failed'));
+                } catch (e) { alert('Error: ' + e.message); }
+            });
+        });
+
+        document.querySelectorAll('.sched-del-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const id = this.dataset.id;
+                const lbl = this.dataset.label;
+                if (!confirm('Delete schedule "' + lbl + '"?')) return;
+                this.disabled = true;
+                try {
+                    const resp = await csrfFetch('/api/scheduled_restarts/' + id, {method: 'DELETE'});
+                    const data = await resp.json();
+                    if (data.success) loadSchedules();
+                    else alert('Error: ' + (data.error || 'Failed'));
+                } catch (e) { alert('Error: ' + e.message); }
+            });
+        });
+
+    } catch (e) {
+        document.getElementById('sched-next-label').textContent = 'Error loading schedules';
+    }
+}
+
+document.getElementById('add-sched-btn')?.addEventListener('click', async function() {
+    const result = document.getElementById('add-sched-result');
+    const time = document.getElementById('new-time').value.trim();
+    const label = document.getElementById('new-label').value.trim();
+    const msgTemplate = document.getElementById('new-msg-template').value.trim();
+    const restartMsg = document.getElementById('new-restart-msg').value.trim();
+    const days = [...document.querySelectorAll('#new-days input:checked')].map(cb => cb.value);
+    const warnRaw = document.getElementById('new-warn').value;
+    const warnMinutes = warnRaw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1);
+
+    if (!time || !/^\d{1,2}:\d{2}$/.test(time)) {
+        result.style.color = 'var(--danger)';
+        result.textContent = 'Enter a valid time (HH:MM).';
+        return;
+    }
+    if (days.length === 0) {
+        result.style.color = 'var(--danger)';
+        result.textContent = 'Select at least one day.';
+        return;
+    }
+
+    this.disabled = true;
+    result.textContent = '';
+    try {
+        const resp = await csrfFetch('/api/scheduled_restarts', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({label, time, days, warn_minutes: warnMinutes, message_template: msgTemplate, restart_message: restartMsg}),
+        });
+        const data = await resp.json();
+        if (data.success) {
+            result.style.color = 'var(--success)';
+            result.textContent = 'Schedule saved!';
+            loadSchedules();
+        } else {
+            result.style.color = 'var(--danger)';
+            result.textContent = 'Error: ' + (data.error || 'Failed');
+        }
+    } catch (e) {
+        result.style.color = 'var(--danger)';
+        result.textContent = 'Error: ' + e.message;
+    }
+    this.disabled = false;
+});
+
+loadSchedules();
+// Refresh countdown every 30 seconds
+setInterval(loadSchedules, 30000);
 </script>
 {% endblock %}
