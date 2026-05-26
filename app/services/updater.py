@@ -26,6 +26,9 @@ PROTECTED_PATHS = {
     'internal-scripts',
     '.git',
     '.env',
+    'run.py',       # has local patch (allow_unsafe_werkzeug=True) required for production
+    'launch.sh',    # local-only file, not in upstream
+    'dune-dashboard.service',  # local-only file, not in upstream
 }
 
 # File extensions that are always safe to overwrite
