@@ -141,92 +141,130 @@ class UpdateService:
             return False, "Update already in progress"
 
         self._update_in_progress = True
-        self._update_status = "Downloading update..."
 
         try:
-            # Download latest zip from the detected branch
             branch = self._current_branch
-            zip_url = f"https://github.com/{GITHUB_REPO}/archive/refs/heads/{branch}.zip"
-            req = urllib.request.Request(zip_url)
-            req.add_header('User-Agent', 'DuneDashboard-UpdateChecker')
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                zip_data = resp.read()
+            git_dir = os.path.join(self.project_root, '.git')
 
-            self._update_status = "Extracting update..."
-
-            # Extract to temp directory
-            temp_dir = tempfile.mkdtemp(prefix='dune_update_')
-            zip_path = os.path.join(temp_dir, 'update.zip')
-            with open(zip_path, 'wb') as f:
-                f.write(zip_data)
-
-            with zipfile.ZipFile(zip_path, 'r') as zf:
-                zf.extractall(temp_dir)
-
-            # Find the extracted folder (e.g., dune-dashboard-main)
-            extracted = [d for d in os.listdir(temp_dir) if os.path.isdir(os.path.join(temp_dir, d)) and d != '__MACOSX']
-            if not extracted:
-                return False, "Failed to extract update"
-
-            source_dir = os.path.join(temp_dir, extracted[0])
-
-            # Create backup
-            backup_dir = os.path.join(self.project_root, 'backups', f'update_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
-            os.makedirs(backup_dir, exist_ok=True)
-
-            # Copy files, skipping protected paths
-            self._update_status = "Applying files..."
-            files_updated = 0
-            for root, dirs, files in os.walk(source_dir):
-                rel_root = os.path.relpath(root, source_dir)
-                target_root = os.path.join(self.project_root, rel_root)
-
-                # Skip protected directories
-                if any(p in PROTECTED_PATHS for p in rel_root.split(os.sep)):
-                    continue
-
-                os.makedirs(target_root, exist_ok=True)
-
-                for file in files:
-                    if file.startswith('.'):
-                        continue
-                    src_file = os.path.join(root, file)
-                    dst_file = os.path.join(target_root, file)
-
-                    # Skip protected files
-                    if file in PROTECTED_PATHS:
-                        continue
-
-                    # Backup existing file if it exists
-                    if os.path.exists(dst_file):
-                        backup_file = os.path.join(backup_dir, rel_root, file)
-                        os.makedirs(os.path.dirname(backup_file), exist_ok=True)
-                        shutil.copy2(dst_file, backup_file)
-
-                    shutil.copy2(src_file, dst_file)
-                    files_updated += 1
-
-            # Cleanup temp
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-            # Update VERSION file to match new version
-            version_file = os.path.join(self.project_root, 'VERSION')
-            with open(version_file, 'w') as f:
-                f.write(self._latest_sha + '\n')
-
-            self._update_status = f"Update applied! {files_updated} files updated. Restarting..."
-            self._update_available = False
-
-            # Restart the application
-            self._restart_app()
-
-            return True, f"Update applied successfully ({files_updated} files)"
+            if os.path.isdir(git_dir):
+                return self._apply_update_git(branch)
+            else:
+                return self._apply_update_zip(branch)
 
         except Exception as e:
             logger.error(f"Update failed: {e}")
             self._update_status = f"Update failed: {e}"
             self._update_in_progress = False
             return False, str(e)
+
+    def _apply_update_git(self, branch):
+        """Apply update via git pull (used when running from a git clone)."""
+        self._update_status = "Pulling latest changes..."
+
+        # Snapshot protected files so git pull can't clobber them
+        protected_backups = {}
+        for fname in PROTECTED_PATHS:
+            fpath = os.path.join(self.project_root, fname)
+            if os.path.isfile(fpath):
+                with open(fpath, 'rb') as f:
+                    protected_backups[fname] = f.read()
+
+        result = subprocess.run(
+            ['git', 'pull', 'origin', branch, '--no-rebase'],
+            cwd=self.project_root, capture_output=True, text=True, timeout=60
+        )
+
+        # Always restore protected files to their pre-pull state
+        for fname, content in protected_backups.items():
+            fpath = os.path.join(self.project_root, fname)
+            with open(fpath, 'wb') as f:
+                f.write(content)
+
+        if result.returncode != 0:
+            self._update_in_progress = False
+            err = result.stderr.strip() or result.stdout.strip()
+            return False, f"Git pull failed: {err}"
+
+        new_sha = subprocess.check_output(
+            ['git', 'rev-parse', 'HEAD'],
+            cwd=self.project_root, stderr=subprocess.DEVNULL
+        ).decode().strip()[:7]
+
+        self._current_sha = new_sha
+        self._update_available = False
+        self._update_status = f"Updated to {new_sha}. Restarting..."
+
+        self._restart_app()
+        return True, f"Updated to {new_sha}"
+
+    def _apply_update_zip(self, branch):
+        """Apply update by downloading a ZIP (used for non-git installations)."""
+        self._update_status = "Downloading update..."
+
+        zip_url = f"https://github.com/{GITHUB_REPO}/archive/refs/heads/{branch}.zip"
+        req = urllib.request.Request(zip_url)
+        req.add_header('User-Agent', 'DuneDashboard-UpdateChecker')
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            zip_data = resp.read()
+
+        self._update_status = "Extracting update..."
+
+        temp_dir = tempfile.mkdtemp(prefix='dune_update_')
+        zip_path = os.path.join(temp_dir, 'update.zip')
+        with open(zip_path, 'wb') as f:
+            f.write(zip_data)
+
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            zf.extractall(temp_dir)
+
+        extracted = [d for d in os.listdir(temp_dir) if os.path.isdir(os.path.join(temp_dir, d)) and d != '__MACOSX']
+        if not extracted:
+            return False, "Failed to extract update"
+
+        source_dir = os.path.join(temp_dir, extracted[0])
+
+        backup_dir = os.path.join(self.project_root, 'backups', f'update_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+        os.makedirs(backup_dir, exist_ok=True)
+
+        self._update_status = "Applying files..."
+        files_updated = 0
+        for root, dirs, files in os.walk(source_dir):
+            rel_root = os.path.relpath(root, source_dir)
+            target_root = os.path.join(self.project_root, rel_root)
+
+            if any(p in PROTECTED_PATHS for p in rel_root.split(os.sep)):
+                continue
+
+            os.makedirs(target_root, exist_ok=True)
+
+            for file in files:
+                if file.startswith('.'):
+                    continue
+                src_file = os.path.join(root, file)
+                dst_file = os.path.join(target_root, file)
+
+                if file in PROTECTED_PATHS:
+                    continue
+
+                if os.path.exists(dst_file):
+                    backup_file = os.path.join(backup_dir, rel_root, file)
+                    os.makedirs(os.path.dirname(backup_file), exist_ok=True)
+                    shutil.copy2(dst_file, backup_file)
+
+                shutil.copy2(src_file, dst_file)
+                files_updated += 1
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+        version_file = os.path.join(self.project_root, 'VERSION')
+        with open(version_file, 'w') as f:
+            f.write(self._latest_sha + '\n')
+
+        self._update_status = f"Update applied! {files_updated} files updated. Restarting..."
+        self._update_available = False
+
+        self._restart_app()
+        return True, f"Update applied successfully ({files_updated} files)"
 
     def _restart_app(self):
         """Restart the dashboard. Under systemd, exit with code 1 so the service
