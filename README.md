@@ -18,12 +18,19 @@ This repo follows a git-flow inspired strategy. Here's the breakdown:
 
 If you're testing this project, grab builds from nightly for the latest features, or main for something more stable. Experimental is where I break things on purpose to see what sticks.
 
+## Download
+
+**[Download the latest release (ZIP)](https://github.com/jdiveley/dune-dashboard/releases/latest)**
+
+Extract the ZIP, then follow the Quick Start below.
+
 ## Quick Start
 
 ### Windows
-1. Double-click `launcher.bat` (or run `.\launcher.ps1` in PowerShell)
-2. Select option **2** to run Setup on first use
-3. Select option **1** to Start Dashboard
+1. Download and extract the ZIP from the [releases page](https://github.com/jdiveley/dune-dashboard/releases/latest)
+2. Double-click `launcher.bat` (or run `.\launcher.ps1` in PowerShell)
+3. Select option **2** to run Setup on first use
+4. Select option **1** to Start Dashboard
 
 > **Tip**: The launcher automatically finds your SSH key from the Dune Awakening server installation at `%LOCALAPPDATA%\DuneAwakeningServer\sshKey`.
 >
