@@ -1066,7 +1066,19 @@ function Run-Setup {
         return $false
     }
 
+    function Test-TcpPort($ip, $port = 22, $timeoutMs = 2000) {
+        try {
+            $client = New-Object System.Net.Sockets.TcpClient
+            $result = $client.BeginConnect($ip, $port, $null, $null)
+            $ok = $result.AsyncWaitHandle.WaitOne($timeoutMs, $false)
+            $client.Close()
+            return $ok
+        } catch { return $false }
+    }
+
+    # Try Hyper-V first (reliable — live running VM)
     $vmIp = $null
+    $vmIpSource = $null
     try {
         $duneVm = Get-VM -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*dune*' -and $_.State -eq 'Running' } | Select-Object -First 1
         if ($duneVm) {
@@ -1075,12 +1087,15 @@ function Run-Setup {
                 $validIps = $vmAdapter.IPAddresses | Where-Object { $_ -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$' -and (Test-IsLocalIP $_) }
                 if ($validIps -and $validIps.Count -gt 0) {
                     $vmIp = @($validIps)[0]
+                    $vmIpSource = "hyperv"
                     Write-Host "  Detected local Hyper-V VM IP: $vmIp (from VM '$($duneVm.Name)')" -ForegroundColor Green
                 }
             }
         }
     } catch { }
 
+    # Fallback: scan known_hosts, but verify the IP is actually reachable before trusting it
+    $knownHostsSuggestion = $null
     if (-not $vmIp) {
         $KnownHosts = Join-Path $env:USERPROFILE ".ssh\known_hosts"
         if (Test-Path $KnownHosts) {
@@ -1090,29 +1105,36 @@ function Run-Setup {
             foreach ($line in $content) {
                 if ($line -match '\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b') {
                     $ip = $matches[1]
-                    if (Test-IsLocalIP $ip) {
-                        $localIps += $ip
-                    } else {
-                        $publicIps += $ip
-                    }
+                    if (Test-IsLocalIP $ip) { $localIps += $ip } else { $publicIps += $ip }
                 }
             }
-            if ($localIps.Count -gt 0) {
-                $validLocal = $localIps | Where-Object { $_ -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$' }
-                if ($validLocal) {
-                    $vmIp = @($validLocal)[-1]
-                    Write-Host "  Detected local IP from SSH history: $vmIp" -ForegroundColor Green
-                }
+            $candidates = if ($localIps.Count -gt 0) {
+                $localIps | Where-Object { $_ -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$' }
             } elseif ($publicIps.Count -gt 0) {
-                $validPublic = $publicIps | Where-Object { $_ -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$' }
-                if ($validPublic) {
-                    $vmIp = @($validPublic)[-1]
-                    Write-Host "  Detected IP from SSH history: $vmIp (verify this is your local VM)" -ForegroundColor Yellow
+                $publicIps | Where-Object { $_ -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$' }
+            } else { @() }
+
+            if ($candidates) {
+                # Test each candidate — use the first one that has SSH port open
+                foreach ($candidate in @($candidates)) {
+                    Write-Host "  Checking SSH history IP $candidate..." -ForegroundColor DarkGray
+                    if (Test-TcpPort $candidate) {
+                        $vmIp = $candidate
+                        $vmIpSource = "known_hosts"
+                        Write-Host "  IP $candidate from SSH history is reachable" -ForegroundColor Green
+                        break
+                    }
+                }
+                if (-not $vmIp) {
+                    # No candidate reachable — store the last one as a suggestion only
+                    $knownHostsSuggestion = @($candidates)[-1]
+                    Write-Host "  SSH history has IPs but none responded on port 22 (may be stale)" -ForegroundColor Yellow
                 }
             }
         }
     }
 
+    # Only auto-fill VmHost if we have a verified IP
     if ($vmIp) { $VmHost = $vmIp }
 
     try {
@@ -1136,12 +1158,27 @@ function Run-Setup {
     } else {
         Write-Host "    Example: Your VM's local IP (e.g., 192.168.x.x, 10.x.x.x)" -ForegroundColor DarkGray
     }
-    $vmHint = $VmHost
-    if ($vmIp -and $vmIp -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$') {
-        $vmHint = "$VmHost (detected - press Enter to accept)"
+    if ($VmHost -ne "YOUR_SERVER_IP") {
+        $sourceLabel = if ($vmIpSource -eq "hyperv") { "from Hyper-V" } else { "reachable, from SSH history" }
+        $val = Read-Host "  VM Host [$VmHost] ($sourceLabel — press Enter to accept)"
+        if ($val) { $VmHost = $val }
+    } else {
+        if ($knownHostsSuggestion) {
+            Write-Host "  [HINT] SSH history has $knownHostsSuggestion but it didn't respond — verify it's correct" -ForegroundColor Yellow
+        }
+        do {
+            $val = Read-Host "  VM Host (enter your server's IP address)"
+            if ($val -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$') {
+                $VmHost = $val
+            } elseif ($val) {
+                Write-Host "  [WARN] That doesn't look like a valid IP address. Try again." -ForegroundColor Yellow
+                $val = $null
+            } else {
+                Write-Host "  [ERROR] Server IP is required. Enter the IP of your game server VM." -ForegroundColor Red
+                $val = $null
+            }
+        } while (-not $VmHost -or $VmHost -eq "YOUR_SERVER_IP")
     }
-    $val = Read-Host "  VM Host [$vmHint]"
-    if ($val) { $VmHost = $val }
 
     if ($EnableRemote) {
         Write-Host ""
