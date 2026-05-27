@@ -142,13 +142,14 @@
                 <thead><tr><th>Deployment</th><th>Actions</th></tr></thead>
                 <tbody>
                     {% for d in deployments %}
+                    {% set short = d.replace('deployment.apps/','') %}
                     <tr>
-                        <td style="font-family:monospace;font-size:13px;">{{ d.replace('deployment.apps/','') }}</td>
+                        <td style="font-family:monospace;font-size:13px;">{{ short }}</td>
                         <td>
-                            <button class="btn-action" data-deploy="{{ d }}" data-action="restart" style="padding:4px 12px;background:#e67e22;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Restart</button>
-                            <button class="btn-action" data-deploy="{{ d }}" data-action="status" style="padding:4px 12px;background:#3498db;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Status</button>
-                            <button class="btn-action" data-deploy="{{ d }}" data-action="scale_0" style="padding:4px 12px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Scale to 0</button>
-                            <button class="btn-action" data-deploy="{{ d }}" data-action="scale_1" style="padding:4px 12px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Scale to 1</button>
+                            <button class="btn-action" data-deploy="{{ short }}" data-action="restart" style="padding:4px 12px;background:#e67e22;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Restart</button>
+                            <button class="btn-action" data-deploy="{{ short }}" data-action="status" style="padding:4px 12px;background:#3498db;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Status</button>
+                            <button class="btn-action" data-deploy="{{ short }}" data-action="scale_0" style="padding:4px 12px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Scale to 0</button>
+                            <button class="btn-action" data-deploy="{{ short }}" data-action="scale_1" style="padding:4px 12px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Scale to 1</button>
                         </td>
                     </tr>
                     {% endfor %}
@@ -276,8 +277,16 @@
 <div class="card">
     <div class="card-header">Pod Status</div>
     <div class="card-body">
-        <button id="refresh-pods" style="padding:8px 16px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Refresh Pods</button>
-        <div id="pods-output" style="margin-top:12px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+            <button id="refresh-pods" style="padding:8px 16px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Refresh Pods</button>
+            {% for d in deployments %}
+            {% set short = d.replace('deployment.apps/','') %}
+            {% if 'fb-deploy' in short %}
+            <button class="btn-action" data-deploy="{{ short }}" data-action="restart" style="padding:8px 16px;background:#e67e22;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Restart File Browser</button>
+            {% endif %}
+            {% endfor %}
+        </div>
+        <div id="pods-output">
             <pre id="pods-text" style="background:#1a1a2e;color:#e0d5c7;padding:16px;border-radius:8px;font-size:12px;overflow-x:auto;white-space:pre-wrap;">Click refresh to load pod status...</pre>
         </div>
     </div>
