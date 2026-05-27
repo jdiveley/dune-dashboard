@@ -1008,13 +1008,8 @@ function Run-Setup {
 
     function Fix-SshKeyPermissions($keyPath) {
         if (-not (Test-Path $keyPath)) { return }
-        $acl = Get-Acl $keyPath
-        $acl.SetAccessRuleProtection($true, $false)
-        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule("$env:USERNAME", "FullControl", "Allow")
-        $acl.SetAccessRule($rule)
-        $adminRule = New-Object System.Security.AccessControl.FileSystemAccessRule("BUILTIN\Administrators", "FullControl", "Allow")
-        $acl.SetAccessRule($adminRule)
-        Set-Acl -Path $keyPath -AclObject $acl
+        # Use icacls to avoid SeSecurityPrivilege requirement of Set-Acl
+        icacls $keyPath /inheritance:r /grant:r "${env:USERNAME}:F" | Out-Null
     }
 
     if (-not $FoundKey) {
