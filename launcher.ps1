@@ -1068,12 +1068,15 @@ function Run-Setup {
 
     $vmIp = $null
     try {
-        $vmAdapter = Get-VMNetworkAdapter -VMName 'dune-awakening' -ErrorAction SilentlyContinue
-        if ($vmAdapter -and $vmAdapter.IPAddresses) {
-            $validIps = $vmAdapter.IPAddresses | Where-Object { $_ -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$' -and (Test-IsLocalIP $_) }
-            if ($validIps -and $validIps.Count -gt 0) {
-                $vmIp = @($validIps)[0]
-                Write-Host "  Detected local Hyper-V VM IP: $vmIp" -ForegroundColor Green
+        $duneVm = Get-VM -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*dune*' -and $_.State -eq 'Running' } | Select-Object -First 1
+        if ($duneVm) {
+            $vmAdapter = Get-VMNetworkAdapter -VMName $duneVm.Name -ErrorAction SilentlyContinue
+            if ($vmAdapter -and $vmAdapter.IPAddresses) {
+                $validIps = $vmAdapter.IPAddresses | Where-Object { $_ -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$' -and (Test-IsLocalIP $_) }
+                if ($validIps -and $validIps.Count -gt 0) {
+                    $vmIp = @($validIps)[0]
+                    Write-Host "  Detected local Hyper-V VM IP: $vmIp (from VM '$($duneVm.Name)')" -ForegroundColor Green
+                }
             }
         }
     } catch { }
