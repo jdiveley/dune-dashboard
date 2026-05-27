@@ -813,13 +813,14 @@ def register_api_routes(app, services, settings):
         pod = k8s.find_pod_by_pattern('fb-deploy')
         return pod
 
-    def _fb_exec(command, timeout=10):
+    def _fb_exec(command, timeout=10, stdin_data=None):
         """Execute kubectl exec in the FileBrowser pod with correct namespace placement."""
         pod = _get_fb_pod()
         if not pod:
             return '', 'FileBrowser pod not found', 1
-        full_cmd = f'sudo kubectl exec {pod} -n {k8s.namespace} -- {command}'
-        return k8s.ssh.run(full_cmd, timeout=timeout)
+        stdin_flag = '-i ' if stdin_data is not None else ''
+        full_cmd = f'sudo kubectl exec {stdin_flag}{pod} -n {k8s.namespace} -- {command}'
+        return k8s.ssh.run(full_cmd, timeout=timeout, stdin_data=stdin_data)
 
     @app.route('/api/files/list', methods=['POST'])
     @auth_req
@@ -879,7 +880,7 @@ def register_api_routes(app, services, settings):
         content_b64 = base64.b64encode(content.encode()).decode()
         safe_path = quote_remote(path)
         save_script = quote_remote(f"base64 -d > {safe_path}")
-        out, err, rc = _fb_exec(f"sh -c {save_script}", timeout=15)
+        out, err, rc = _fb_exec(f"sh -c {save_script}", timeout=15, stdin_data=(content_b64 + '\n').encode())
         if rc != 0:
             return jsonify({'success': False, 'error': err or 'Failed to save file'})
         return jsonify({'success': True})

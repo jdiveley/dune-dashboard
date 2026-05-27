@@ -69,22 +69,26 @@ class SSHService:
             self._client = client
             return self._client
 
-    def run(self, command, timeout=30):
+    def run(self, command, timeout=30, stdin_data=None):
         """Execute a remote command via SSH.
 
         Args:
             command: The shell command to execute.
             timeout: Maximum time in seconds to wait for the command.
+            stdin_data: Optional bytes to write to the command's stdin before reading output.
 
         Returns:
             Tuple of (stdout, stderr, return_code).
         """
         cmd_display = command[:150] + '...' if len(command) > 150 else command
         logger.debug(f"SSH executing: {cmd_display}")
-        
+
         try:
             client = self._get_client()
             stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
+            if stdin_data is not None:
+                stdin.write(stdin_data if isinstance(stdin_data, bytes) else stdin_data.encode())
+                stdin.channel.shutdown_write()
             out = stdout.read().decode('utf-8', errors='replace')
             err = stderr.read().decode('utf-8', errors='replace')
             rc = stdout.channel.recv_exit_status()
