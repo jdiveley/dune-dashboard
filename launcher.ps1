@@ -1219,12 +1219,28 @@ function Run-Setup {
         $sshOk = $false
         for ($i = 0; $i -lt 12; $i++) {
             try {
-                $testOut = ssh -i "$FoundKey" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -o BatchMode=yes dune@$VmHost "echo ok" 2>$null
-                $testExit = $LASTEXITCODE
-                if ($testOut -match "ok" -and $testExit -eq 0) {
-                    $sshOk = $true
-                    break
+                $keyArg = $FoundKey
+                $hostArg = $VmHost
+                $job = Start-Job {
+                    ssh -i $using:keyArg `
+                        -o StrictHostKeyChecking=accept-new `
+                        -o ConnectTimeout=5 `
+                        -o BatchMode=yes `
+                        -o PasswordAuthentication=no `
+                        dune@$using:hostArg "echo ok" 2>$null
                 }
+                $done = Wait-Job $job -Timeout 8
+                if ($done) {
+                    $testOut = Receive-Job $job
+                    if ($testOut -match "ok") {
+                        $sshOk = $true
+                        Remove-Job $job -Force
+                        break
+                    }
+                } else {
+                    Stop-Job $job
+                }
+                Remove-Job $job -Force
             } catch {}
             Write-Host "  Attempt $($i+1)/12 - SSH not ready yet, waiting 5s..." -ForegroundColor DarkGray
             Start-Sleep -Seconds 5
@@ -1233,7 +1249,11 @@ function Run-Setup {
         if ($sshOk) {
             Write-Host "  SSH connection OK" -ForegroundColor Green
             try {
-                $nsOut = ssh -i "$FoundKey" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes dune@$VmHost "sudo kubectl get namespaces -o name" 2>$null
+                $keyArg2 = $FoundKey; $hostArg2 = $VmHost
+                $nsJob = Start-Job { ssh -i $using:keyArg2 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes -o PasswordAuthentication=no dune@$using:hostArg2 "sudo kubectl get namespaces -o name" 2>$null }
+                $nsDone = Wait-Job $nsJob -Timeout 15
+                $nsOut = if ($nsDone) { Receive-Job $nsJob } else { Stop-Job $nsJob; $null }
+                Remove-Job $nsJob -Force
             } catch { $nsOut = $null }
             if ($nsOut) {
                 foreach ($line in $nsOut -split "`n") {
