@@ -49,8 +49,9 @@ class BackupService:
 
             db_user = self.db_config.get('user', 'dune')
             db_name = self.db_config.get('database', 'dune')
+            db_port = self.db_config.get('pod_port', 15432)
             namespace = self.k8s.namespace
-            cmd = f"sudo kubectl exec -n {namespace} {pod} -- pg_dump -h 127.0.0.1 -U {db_user} {db_name}"
+            cmd = f"sudo kubectl exec -n {namespace} {pod} -- pg_dump -h 127.0.0.1 -p {db_port} -U {db_user} {db_name}"
 
             with gzip.open(filepath, 'wb') as gz:
                 err, rc = self.ssh.run_streaming(cmd, gz, timeout=600)

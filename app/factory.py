@@ -185,6 +185,7 @@ def create_app(settings_path=None):
     db_config = {
         'host': db_host,
         'port': settings['database']['port'],
+        'pod_port': settings['database'].get('pod_port', 15432),
         'user': settings['database']['user'],
         'password': settings['database']['password'],
         'database': settings['database']['name'],
