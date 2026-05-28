@@ -7,7 +7,7 @@ $ErrorActionPreference = "Continue"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $ProjectRoot
 
-# ── Logging Setup ─────────────────────────────────────────────────────
+# -- Logging Setup -----------------------------------------------------
 
 $LogDir = Join-Path $ProjectRoot "logs"
 $LauncherLogDir = Join-Path $LogDir "launcher"
@@ -18,7 +18,7 @@ if (-not (Test-Path $LauncherLogDir)) {
 $LogDate = Get-Date -Format "yyyy-MM-dd"
 $LogTime = Get-Date -Format "HH-mm-ss"
 
-# ── Log Sanitization ──────────────────────────────────────────────────
+# -- Log Sanitization --------------------------------------------------
 # Redacts identifiable information before writing to log files.
 # Console output remains unchanged for user visibility.
 
@@ -211,7 +211,7 @@ function Write-LogStyled {
     Write-Log -Message "$prefix$Message" -Level $Level -Category $Category
 }
 
-# ── Log Rotation & Cleanup ────────────────────────────────────────────
+# -- Log Rotation & Cleanup --------------------------------------------
 # Prevents logs from growing unbounded.
 # - Deletes log files older than $LogRetentionDays
 # - Truncates current logs exceeding $LogMaxSizeMB
@@ -263,7 +263,7 @@ function Invoke-LogCleanup {
 # Run cleanup at launcher startup
 Invoke-LogCleanup
 
-# ── Helper Functions ──────────────────────────────────────────────────
+# -- Helper Functions --------------------------------------------------
 
 function Show-Banner {
     Write-Host ""
@@ -1076,7 +1076,7 @@ function Run-Setup {
         } catch { return $false }
     }
 
-    # Try Hyper-V first (reliable — live running VM)
+    # Try Hyper-V first (reliable - live running VM)
     $vmIp = $null
     $vmIpSource = $null
     try {
@@ -1115,7 +1115,7 @@ function Run-Setup {
             } else { @() }
 
             if ($candidates) {
-                # Test each candidate — use the first one that has SSH port open
+                # Test each candidate - use the first one that has SSH port open
                 foreach ($candidate in @($candidates)) {
                     Write-Host "  Checking SSH history IP $candidate..." -ForegroundColor DarkGray
                     if (Test-TcpPort $candidate) {
@@ -1126,7 +1126,7 @@ function Run-Setup {
                     }
                 }
                 if (-not $vmIp) {
-                    # No candidate reachable — store the last one as a suggestion only
+                    # No candidate reachable - store the last one as a suggestion only
                     $knownHostsSuggestion = @($candidates)[-1]
                     Write-Host "  SSH history has IPs but none responded on port 22 (may be stale)" -ForegroundColor Yellow
                 }
@@ -1160,11 +1160,11 @@ function Run-Setup {
     }
     if ($VmHost -ne "YOUR_SERVER_IP") {
         $sourceLabel = if ($vmIpSource -eq "hyperv") { "from Hyper-V" } else { "reachable, from SSH history" }
-        $val = Read-Host "  VM Host [$VmHost] ($sourceLabel — press Enter to accept)"
+        $val = Read-Host "  VM Host [$VmHost] ($sourceLabel - press Enter to accept)"
         if ($val) { $VmHost = $val }
     } else {
         if ($knownHostsSuggestion) {
-            Write-Host "  [HINT] SSH history has $knownHostsSuggestion but it didn't respond — verify it's correct" -ForegroundColor Yellow
+            Write-Host "  [HINT] SSH history has $knownHostsSuggestion but it didn't respond - verify it's correct" -ForegroundColor Yellow
         }
         do {
             $val = Read-Host "  VM Host (enter your server's IP address)"
@@ -2218,7 +2218,7 @@ function Start-DashboardDebug {
     Write-Host "  Starting Dashboard with DEBUG LOGGING enabled" -ForegroundColor Magenta
     Write-Host "  ============================================================" -ForegroundColor Magenta
     Write-Host ""
-    Write-Host "  ⚠️  WARNING: Debug logging can significantly impact performance!" -ForegroundColor Yellow
+    Write-Host "  [!]  WARNING: Debug logging can significantly impact performance!" -ForegroundColor Yellow
     Write-Host "     - Logs every HTTP request/response with full headers" -ForegroundColor Yellow
     Write-Host "     - Logs all SSH commands and results" -ForegroundColor Yellow
     Write-Host "     - Logs all database queries" -ForegroundColor Yellow
@@ -2313,7 +2313,7 @@ print('ok')
     Start-Dashboard -PreserveDebug
 }
 
-# ── Main Loop ───────────────────────────────────────────────────────────
+# -- Main Loop -----------------------------------------------------------
 
 Show-Banner
 
