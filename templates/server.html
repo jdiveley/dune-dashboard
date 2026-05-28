@@ -374,6 +374,21 @@
 </div>
 
 {% endif %}
+
+<!-- Crontab check modal -->
+<div id="crontab-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:var(--surface,#1e1e2e);border:1px solid var(--border,#333);border-radius:10px;padding:24px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;">
+        <h3 style="margin:0 0 8px;color:var(--text,#e0d5c7);">Existing Crontab Entries Found</h3>
+        <p style="color:var(--text-muted,#aaa);font-size:13px;margin:0 0 16px;">The following entries exist in the game server crontab. Select any you want to remove before adding your schedule:</p>
+        <div id="crontab-modal-entries" style="margin-bottom:16px;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button id="crontab-modal-skip" style="padding:8px 18px;background:var(--surface,#1e1e2e);border:1px solid var(--border,#333);border-radius:6px;color:var(--text,#e0d5c7);cursor:pointer;">Skip</button>
+            <button id="crontab-modal-remove" style="padding:8px 18px;background:var(--danger,#e74c3c);border:none;border-radius:6px;color:#fff;cursor:pointer;">Remove Selected &amp; Continue</button>
+        </div>
+        <div id="crontab-modal-error" style="color:var(--danger,#e74c3c);font-size:13px;margin-top:10px;display:none;"></div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -864,6 +879,23 @@ async function loadSchedules() {
     }
 }
 
+async function saveSchedule(payload, result) {
+    const resp = await csrfFetch('/api/scheduled_restarts', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    if (data.success) {
+        result.style.color = 'var(--success)';
+        result.textContent = 'Schedule saved!';
+        loadSchedules();
+    } else {
+        result.style.color = 'var(--danger)';
+        result.textContent = 'Error: ' + (data.error || 'Failed');
+    }
+}
+
 document.getElementById('add-sched-btn')?.addEventListener('click', async function() {
     const result = document.getElementById('add-sched-result');
     const time = document.getElementById('new-time').value.trim();
@@ -885,23 +917,67 @@ document.getElementById('add-sched-btn')?.addEventListener('click', async functi
         return;
     }
 
+    const payload = {label, time, days, warn_minutes: warnMinutes, message_template: msgTemplate, restart_message: restartMsg};
+
     this.disabled = true;
     result.textContent = '';
+
     try {
-        const resp = await csrfFetch('/api/scheduled_restarts', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({label, time, days, warn_minutes: warnMinutes, message_template: msgTemplate, restart_message: restartMsg}),
-        });
-        const data = await resp.json();
-        if (data.success) {
-            result.style.color = 'var(--success)';
-            result.textContent = 'Schedule saved!';
-            loadSchedules();
-        } else {
-            result.style.color = 'var(--danger)';
-            result.textContent = 'Error: ' + (data.error || 'Failed');
+        // Check for existing crontab entries before saving
+        const cronResp = await fetch('/api/crontab/check');
+        const cronData = await cronResp.json();
+        const allEntries = [];
+        if (cronData.success) {
+            (cronData.entries.user || []).forEach(line => allEntries.push({type: 'user', line}));
+            (cronData.entries.root || []).forEach(line => allEntries.push({type: 'root', line}));
         }
+
+        if (allEntries.length > 0) {
+            // Show modal
+            const modal = document.getElementById('crontab-modal');
+            const entriesDiv = document.getElementById('crontab-modal-entries');
+            const errorDiv = document.getElementById('crontab-modal-error');
+            errorDiv.style.display = 'none';
+            entriesDiv.innerHTML = allEntries.map((e, i) => `
+                <label style="display:flex;align-items:flex-start;gap:8px;padding:8px;border:1px solid var(--border,#333);border-radius:6px;margin-bottom:6px;cursor:pointer;">
+                    <input type="checkbox" data-idx="${i}" style="margin-top:3px;flex-shrink:0;">
+                    <span style="font-family:monospace;font-size:12px;color:var(--text,#e0d5c7);word-break:break-all;">
+                        <span style="color:var(--text-muted,#aaa);font-size:11px;">${e.type === 'root' ? 'sudo crontab' : 'crontab'}</span><br>${e.line}
+                    </span>
+                </label>`).join('');
+            modal.style.display = 'flex';
+
+            await new Promise(resolve => {
+                document.getElementById('crontab-modal-skip').onclick = () => {
+                    modal.style.display = 'none';
+                    resolve('skip');
+                };
+                document.getElementById('crontab-modal-remove').onclick = async () => {
+                    const selected = [...entriesDiv.querySelectorAll('input[type=checkbox]:checked')]
+                        .map(cb => allEntries[parseInt(cb.dataset.idx)]);
+                    if (selected.length === 0) {
+                        modal.style.display = 'none';
+                        resolve('skip');
+                        return;
+                    }
+                    const removeResp = await csrfFetch('/api/crontab/remove', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({entries: selected}),
+                    });
+                    const removeData = await removeResp.json();
+                    if (!removeData.success) {
+                        errorDiv.textContent = 'Remove failed: ' + (removeData.error || 'Unknown error');
+                        errorDiv.style.display = 'block';
+                        return;
+                    }
+                    modal.style.display = 'none';
+                    resolve('removed');
+                };
+            });
+        }
+
+        await saveSchedule(payload, result);
     } catch (e) {
         result.style.color = 'var(--danger)';
         result.textContent = 'Error: ' + e.message;

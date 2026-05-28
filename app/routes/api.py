@@ -1279,6 +1279,53 @@ def register_api_routes(app, services, settings):
 
         return jsonify({'success': True})
 
+    @app.route('/api/crontab/check', methods=['GET'])
+    @auth_req
+    def crontab_check():
+        entries = {'user': [], 'root': []}
+        for key, cmd in [('user', 'crontab -l 2>/dev/null'), ('root', 'sudo crontab -l 2>/dev/null')]:
+            out, _, rc = ssh.run(cmd, timeout=10)
+            if rc == 0 and out.strip():
+                for line in out.splitlines():
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith('#'):
+                        entries[key].append(stripped)
+        return jsonify({'success': True, 'entries': entries})
+
+    @app.route('/api/crontab/remove', methods=['POST'])
+    @auth_req
+    @limiter.limit("50 per hour")
+    def crontab_remove():
+        data = request.get_json() or {}
+        to_remove = data.get('entries', [])  # [{type: 'user'|'root', line: '...'}]
+        if not to_remove:
+            return jsonify({'success': False, 'error': 'No entries specified'})
+
+        errors = []
+        for entry in to_remove:
+            cron_type = entry.get('type')
+            line = entry.get('line', '')
+            if cron_type not in ('user', 'root') or not line:
+                errors.append(f'Invalid entry: {entry}')
+                continue
+            read_cmd = 'crontab -l 2>/dev/null' if cron_type == 'user' else 'sudo crontab -l 2>/dev/null'
+            write_cmd = 'crontab -' if cron_type == 'user' else 'sudo crontab -'
+            out, err, rc = ssh.run(read_cmd, timeout=10)
+            if rc != 0 and 'no crontab' not in (err + out).lower():
+                errors.append(f'Could not read {cron_type} crontab: {err}')
+                continue
+            new_lines = [l for l in out.splitlines() if l.strip() != line]
+            new_content = '\n'.join(new_lines)
+            if new_content and not new_content.endswith('\n'):
+                new_content += '\n'
+            _, err, rc = ssh.run(write_cmd, timeout=10, stdin_data=new_content.encode())
+            if rc != 0:
+                errors.append(f'Could not write {cron_type} crontab: {err}')
+
+        if errors:
+            return jsonify({'success': False, 'error': '; '.join(errors)})
+        return jsonify({'success': True})
+
     @app.route('/api/battlegroup/broadcast', methods=['POST'])
     @auth_req
     @limiter.limit("60 per hour")
