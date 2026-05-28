@@ -122,18 +122,26 @@
 {% block scripts %}
 <script>
 (function() {
-    function fmtRelative(isoStr) {
-        const dt = new Date(isoStr);
-        const now = Date.now();
-        const diff = Math.floor((now - dt.getTime()) / 1000);
+    function fmtRelative(dt) {
+        const diff = Math.floor((Date.now() - dt.getTime()) / 1000);
         if (diff < 60) return diff + 's ago';
         if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
         if (diff < 86400) {
             const h = Math.floor(diff / 3600), m = Math.floor((diff % 3600) / 60);
             return h + 'h ' + (m > 0 ? m + 'm ' : '') + 'ago';
         }
-        const d = Math.floor(diff / 86400);
-        return d + 'd ago';
+        return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    function fmtLocalTime(dt) {
+        const now = new Date();
+        const isToday = dt.toDateString() === now.toDateString();
+        const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+        const isYesterday = dt.toDateString() === yesterday.toDateString();
+        const time = dt.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+        if (isToday) return 'Today ' + time;
+        if (isYesterday) return 'Yesterday ' + time;
+        return dt.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ' + time;
     }
 
     fetch('/api/battlegroup/last_restart')
@@ -142,8 +150,9 @@
             const el = document.getElementById('last-restart-value');
             if (!el) return;
             if (data.success) {
-                el.textContent = fmtRelative(data.last_restart);
-                el.title = new Date(data.last_restart).toLocaleString();
+                const dt = new Date(data.last_restart);
+                el.textContent = fmtLocalTime(dt);
+                el.title = fmtRelative(dt);
             } else {
                 el.textContent = 'N/A';
                 el.title = data.error || '';
