@@ -12,11 +12,12 @@ MAX_BACKUPS = 10
 
 
 class BackupService:
-    def __init__(self, ssh_service, k8s_service, db_config, backup_dir):
+    def __init__(self, ssh_service, k8s_service, db_config, backup_dir, db_pod_port=15432):
         self.ssh = ssh_service
         self.k8s = k8s_service
         self.db_config = db_config
         self.backup_dir = backup_dir
+        self.db_pod_port = db_pod_port
         self._in_progress = False
         self._last_status = None
         os.makedirs(backup_dir, exist_ok=True)
@@ -49,9 +50,8 @@ class BackupService:
 
             db_user = self.db_config.get('user', 'dune')
             db_name = self.db_config.get('database', 'dune')
-            db_port = self.db_config.get('pod_port', 15432)
             namespace = self.k8s.namespace
-            cmd = f"sudo kubectl exec -n {namespace} {pod} -- pg_dump -h 127.0.0.1 -p {db_port} -U {db_user} {db_name}"
+            cmd = f"sudo kubectl exec -n {namespace} {pod} -- pg_dump -h 127.0.0.1 -p {self.db_pod_port} -U {db_user} {db_name}"
 
             with gzip.open(filepath, 'wb') as gz:
                 err, rc = self.ssh.run_streaming(cmd, gz, timeout=600)

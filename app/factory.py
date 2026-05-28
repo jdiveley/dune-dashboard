@@ -185,11 +185,11 @@ def create_app(settings_path=None):
     db_config = {
         'host': db_host,
         'port': settings['database']['port'],
-        'pod_port': settings['database'].get('pod_port', 15432),
         'user': settings['database']['user'],
         'password': settings['database']['password'],
         'database': settings['database']['name'],
     }
+    db_pod_port = settings['database'].get('pod_port', 15432)
 
     db_service = DatabaseService(
         db_config,
@@ -254,6 +254,7 @@ def create_app(settings_path=None):
         k8s_service=k8s_service,
         db_config=db_config,
         backup_dir=os.path.join(base_dir, 'backups', 'db'),
+        db_pod_port=db_pod_port,
     )
 
     services = {
