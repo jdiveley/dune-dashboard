@@ -147,24 +147,27 @@ def _validate_server_host(settings):
     """Validate and fix server.host if invalid or placeholder."""
     server = settings.setdefault('server', {})
     host = server.get('host', '')
+    host_str = str(host).strip() if host else ''
+    invalid_hosts = ('', 'YOUR_SERVER_IP', 'YOUR_VM_IP', 'null', 'None')
 
+    # host is already valid — never override it with local_ip
+    if host_str and host_str not in invalid_hosts:
+        return settings
+
+    # host is missing/invalid — try local_ip as a fallback
     local_ip = server.get('local_ip')
     if local_ip:
         local_ip_str = str(local_ip).strip()
         if local_ip_str and local_ip_str not in ('', 'null', 'None', 'YOUR_SERVER_IP', 'YOUR_VM_IP'):
             if local_ip_str.count('.') == 3 and all(part.isdigit() and 0 <= int(part) <= 255 for part in local_ip_str.split('.')):
                 server['host'] = local_ip_str
-                logger.info(f"Using server.local_ip override: {server['host']}")
+                logger.info(f"Using server.local_ip fallback: {server['host']}")
                 return settings
 
-    host_str = str(host).strip() if host else ''
-    invalid_hosts = ('', 'YOUR_SERVER_IP', 'YOUR_VM_IP', 'null', 'None')
-
-    if host_str in invalid_hosts or not host_str:
-        detected_ip = _detect_local_ip()
-        server['host'] = detected_ip
-        logger.warning(f"Invalid server.host detected, using auto-detected IP: {detected_ip}")
-        logger.warning("To fix: Edit settings.yaml and set server.host to your VM's IP address")
+    detected_ip = _detect_local_ip()
+    server['host'] = detected_ip
+    logger.warning(f"Invalid server.host detected, using auto-detected IP: {detected_ip}")
+    logger.warning("To fix: Edit settings.yaml and set server.host to your VM's IP address")
 
     return settings
 
