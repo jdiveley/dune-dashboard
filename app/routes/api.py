@@ -105,6 +105,40 @@ def register_api_routes(app, services, settings):
         return jsonify({'cpu': 'N/A', 'memory': 'N/A'})
 
     # Battlegroup
+    @app.route('/api/battlegroup/last_restart')
+    @auth_req
+    def battlegroup_last_restart():
+        import json as _json
+        from datetime import datetime, timezone as _tz
+        out, err, rc = k8s.run('get pods -o json', timeout=15)
+        if rc != 0:
+            return jsonify({'success': False, 'error': err or 'Failed to get pods'})
+        try:
+            items = _json.loads(out).get('items', [])
+        except Exception:
+            return jsonify({'success': False, 'error': 'Could not parse pod list'})
+
+        oldest = None
+        for pod in items:
+            name = pod.get('metadata', {}).get('name', '')
+            # Strip the namespace prefix (everything up to and including -otgeen-)
+            short = name.split('-otgeen-', 1)[-1] if '-otgeen-' in name else name
+            if short.startswith('db-') or short.startswith('fb-'):
+                continue
+            start = pod.get('status', {}).get('startTime')
+            if not start:
+                continue
+            try:
+                dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                if oldest is None or dt < oldest:
+                    oldest = dt
+            except ValueError:
+                continue
+
+        if oldest is None:
+            return jsonify({'success': False, 'error': 'No battlegroup pods found'})
+        return jsonify({'success': True, 'last_restart': oldest.isoformat()})
+
     @app.route('/server/battlegroup/status')
     @auth_req
     def battlegroup_status():

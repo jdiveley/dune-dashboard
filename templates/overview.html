@@ -50,6 +50,10 @@
         <div class="label">Total Actors</div>
         <div class="value">{{ actor_count }}</div>
     </div>
+    <div class="stat-card">
+        <div class="label">Last BG Restart</div>
+        <div class="value" id="last-restart-value" style="font-size:1rem;" title="">—</div>
+    </div>
 </div>
 
 {% if players_online %}
@@ -113,4 +117,42 @@
     </div>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    function fmtRelative(isoStr) {
+        const dt = new Date(isoStr);
+        const now = Date.now();
+        const diff = Math.floor((now - dt.getTime()) / 1000);
+        if (diff < 60) return diff + 's ago';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+        if (diff < 86400) {
+            const h = Math.floor(diff / 3600), m = Math.floor((diff % 3600) / 60);
+            return h + 'h ' + (m > 0 ? m + 'm ' : '') + 'ago';
+        }
+        const d = Math.floor(diff / 86400);
+        return d + 'd ago';
+    }
+
+    fetch('/api/battlegroup/last_restart')
+        .then(r => r.json())
+        .then(data => {
+            const el = document.getElementById('last-restart-value');
+            if (!el) return;
+            if (data.success) {
+                el.textContent = fmtRelative(data.last_restart);
+                el.title = new Date(data.last_restart).toLocaleString();
+            } else {
+                el.textContent = 'N/A';
+                el.title = data.error || '';
+            }
+        })
+        .catch(() => {
+            const el = document.getElementById('last-restart-value');
+            if (el) { el.textContent = 'N/A'; }
+        });
+})();
+</script>
 {% endblock %}
