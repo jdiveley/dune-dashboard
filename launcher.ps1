@@ -2,6 +2,9 @@
 # This script handles both setup and starting the dashboard.
 # Run this script and choose what you want to do.
 
+$SCRIPT_VERSION = "1.3.0"
+$GITHUB_REPO    = "jdiveley/dune-dashboard"
+
 $ErrorActionPreference = "Continue"
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -268,9 +271,153 @@ Invoke-LogCleanup
 function Show-Banner {
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host "  Dune Awakening Dashboard" -ForegroundColor Cyan
+    Write-Host "  Dune Awakening Dashboard  v$SCRIPT_VERSION" -ForegroundColor Cyan
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host ""
+}
+
+function Get-LatestRelease {
+    try {
+        $headers = @{ "User-Agent" = "dune-dashboard-launcher/$SCRIPT_VERSION" }
+        return Invoke-RestMethod -Uri "https://api.github.com/repos/$GITHUB_REPO/releases/latest" -Headers $headers -TimeoutSec 10
+    } catch { return $null }
+}
+
+function Check-For-Update {
+    param([switch]$Silent)
+
+    if (-not $Silent) {
+        Write-Host ""
+        Write-Host "  Checking for updates..." -ForegroundColor Yellow
+    }
+
+    $release = Get-LatestRelease
+    if (-not $release) {
+        if (-not $Silent) {
+            Write-Host "  Could not reach GitHub. Check your internet connection." -ForegroundColor Yellow
+            Read-Host "  Press Enter to return to menu"
+        }
+        return
+    }
+
+    $latestVersion = $release.tag_name -replace '^v', ''
+
+    if (-not $Silent) {
+        Write-Host "  Current version : v$SCRIPT_VERSION" -ForegroundColor DarkGray
+        Write-Host "  Latest version  : v$latestVersion" -ForegroundColor DarkGray
+        Write-Host ""
+    }
+
+    $isNewer = $false
+    try {
+        $isNewer = ([Version]$latestVersion) -gt ([Version]$SCRIPT_VERSION)
+    } catch {
+        $isNewer = ($latestVersion -ne $SCRIPT_VERSION)
+    }
+
+    if (-not $isNewer) {
+        if (-not $Silent) {
+            Write-Host "  Already up to date!" -ForegroundColor Green
+            Read-Host "  Press Enter to return to menu"
+        }
+        return
+    }
+
+    if ($Silent) {
+        Write-Host "  [!] Update available: v$latestVersion  (choose option 7 to install)" -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host "  Update available: v$latestVersion" -ForegroundColor Green
+    if ($release.body) {
+        Write-Host ""
+        Write-Host "  What's new:" -ForegroundColor Cyan
+        ($release.body -split "`n") | Select-Object -First 12 | ForEach-Object {
+            Write-Host "    $_" -ForegroundColor DarkGray
+        }
+    }
+    Write-Host ""
+    $confirm = Read-Host "  Download and install update? (Y/n)"
+    if ($confirm -eq 'n' -or $confirm -eq 'N') {
+        Write-Host "  Update skipped." -ForegroundColor DarkGray
+        Read-Host "  Press Enter to return to menu"
+        return
+    }
+
+    Apply-Update -Release $release
+}
+
+function Apply-Update {
+    param($Release)
+
+    $zipUrl  = $Release.zipball_url
+    $tempDir = Join-Path $env:TEMP "dune-update-$(Get-Random)"
+    $zipPath = "$tempDir.zip"
+
+    Write-Host ""
+    Write-Host "  Downloading..." -ForegroundColor Yellow
+    try {
+        New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+    } catch {
+        Write-Host "  Download failed: $_" -ForegroundColor Red
+        Read-Host "  Press Enter to return to menu"
+        return
+    }
+
+    Write-Host "  Extracting..." -ForegroundColor Yellow
+    try {
+        Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
+    } catch {
+        Write-Host "  Extraction failed: $_" -ForegroundColor Red
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+        Read-Host "  Press Enter to return to menu"
+        return
+    }
+
+    $extractedRoot = Get-ChildItem $tempDir -Directory | Select-Object -First 1
+    if (-not $extractedRoot) {
+        Write-Host "  Could not find extracted files." -ForegroundColor Red
+        Read-Host "  Press Enter to return to menu"
+        return
+    }
+
+    Write-Host "  Applying update..." -ForegroundColor Yellow
+
+    $protected = @(
+        "settings.yaml",
+        "ssl",
+        "logs",
+        "backups",
+        (Join-Path "internal-scripts" "ssh" "sshKey")
+    )
+
+    $copied = 0; $skipped = 0
+    Get-ChildItem $extractedRoot.FullName -Recurse -File | ForEach-Object {
+        $relPath = $_.FullName.Substring($extractedRoot.FullName.Length + 1)
+        $isProtected = $false
+        foreach ($p in $protected) {
+            if ($relPath -eq $p -or $relPath.StartsWith($p + '\') -or $relPath.StartsWith($p + '/')) {
+                $isProtected = $true; break
+            }
+        }
+        if ($isProtected) { $skipped++; return }
+        $dest = Join-Path $ProjectRoot $relPath
+        $destDir = Split-Path $dest -Parent
+        if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir -Force | Out-Null }
+        Copy-Item $_.FullName $dest -Force
+        $copied++
+    }
+
+    Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+    Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+
+    Write-Host "  Updated $copied files ($skipped protected files preserved)." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  Update complete! Relaunching..." -ForegroundColor Green
+    Read-Host "  Press Enter to relaunch"
+    Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    exit 0
 }
 
 function Show-Menu {
@@ -298,6 +445,10 @@ function Show-Menu {
     Write-Host "  [6] Start Dashboard (Debug Mode)" -ForegroundColor Magenta
     Write-Host "      Launch dashboard with full debug logging enabled." -ForegroundColor DarkGray
     Write-Host "      Logs written to logs/debug.log - includes SSH, API, DB, K8s details." -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  [7] Check for Updates" -ForegroundColor White
+    Write-Host "      Check GitHub for a newer version and install it automatically." -ForegroundColor DarkGray
+    Write-Host "      Your settings.yaml and SSH key are always preserved." -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "  [Q] Quit" -ForegroundColor White
     Write-Host ""
@@ -2336,6 +2487,7 @@ print('ok')
 # -- Main Loop -----------------------------------------------------------
 
 Show-Banner
+Check-For-Update -Silent
 
 while ($true) {
     Show-Menu
@@ -2348,9 +2500,10 @@ while ($true) {
         "4" { Install-CaCert; break }
         "5" { Clean-CaCerts; break }
         "6" { Start-DashboardDebug; break }
+        "7" { Check-For-Update; break }
         "Q" { Write-Host ""; Write-Host "  Goodbye!"; Write-Host ""; exit 0 }
         "q" { Write-Host ""; Write-Host "  Goodbye!"; Write-Host ""; exit 0 }
-        default { Write-Host ""; Write-Host "  Invalid choice. Please enter 1, 2, 3, 4, 5, 6, or Q." -ForegroundColor Yellow; Write-Host "" }
+        default { Write-Host ""; Write-Host "  Invalid choice. Please enter 1-7 or Q." -ForegroundColor Yellow; Write-Host "" }
     }
 
     Write-Host ""
