@@ -116,7 +116,7 @@
                     <td>{{ p.dimension_index }}</td>
                     <td>{{ 'Yes' if p.blocked else 'No' }}</td>
                     <td>{{ p.label or '' }}</td>
-                    <td>{% if p.deployment %}<button class="partition-btn" data-deploy="{{ p.deployment }}" data-map="{{ p.map }}" style="padding:4px 12px;background:#e67e22;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Restart</button>{% else %}&mdash;{% endif %}</td>
+                    <td>{% if p.deployment and not is_readonly %}<button class="partition-btn" data-deploy="{{ p.deployment }}" data-map="{{ p.map }}" style="padding:4px 12px;background:#e67e22;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Restart</button>{% else %}&mdash;{% endif %}</td>
                 </tr>
                 {% else %}
                 <tr><td colspan="7" class="empty">No partitions found</td></tr>
@@ -146,10 +146,14 @@
                     <tr>
                         <td style="font-family:monospace;font-size:13px;">{{ short }}</td>
                         <td>
+                            {% if not is_readonly %}
                             <button class="btn-action" data-deploy="{{ short }}" data-action="restart" style="padding:4px 12px;background:#e67e22;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Restart</button>
+                            {% endif %}
                             <button class="btn-action" data-deploy="{{ short }}" data-action="status" style="padding:4px 12px;background:#3498db;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Status</button>
+                            {% if not is_readonly %}
                             <button class="btn-action" data-deploy="{{ short }}" data-action="scale_0" style="padding:4px 12px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Scale to 0</button>
                             <button class="btn-action" data-deploy="{{ short }}" data-action="scale_1" style="padding:4px 12px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Scale to 1</button>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -179,10 +183,12 @@
     </div>
     <div class="card-body">
         <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+            {% if not is_readonly %}
             <button id="bg-btn-start" class="bg-btn" style="padding:8px 20px;background:#27ae60;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Start</button>
             <button id="bg-btn-stop" class="bg-btn" style="padding:8px 20px;background:#e74c3c;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Stop</button>
             <button id="bg-btn-restart" class="bg-btn" style="padding:8px 20px;background:#e67e22;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Restart</button>
             <button id="bg-btn-update" class="bg-btn" style="padding:8px 20px;background:#9b59b6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Update</button>
+            {% endif %}
             <button id="bg-btn-refresh" style="padding:8px 20px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Refresh Status</button>
         </div>
         <div id="bg-status-output">
@@ -191,6 +197,7 @@
     </div>
 </div>
 
+{% if not is_readonly %}
 <div class="card">
     <div class="card-header">
         <span>Broadcast Message</span>
@@ -204,6 +211,7 @@
         <div id="broadcast-result" style="margin-top:8px;font-size:13px;display:none;"></div>
     </div>
 </div>
+{% endif %}
 
 <div class="card">
     <div class="card-header" style="cursor:pointer;" onclick="document.getElementById('sched-section').classList.toggle('hidden');">
@@ -214,6 +222,7 @@
 
         <div id="sched-list" style="margin-bottom:16px;"></div>
 
+        {% if not is_readonly %}
         <details style="margin-bottom:4px;">
             <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary);padding:4px 0;user-select:none;">+ Add Schedule</summary>
             <div style="margin-top:12px;padding:16px;background:#1a1a2e;border-radius:8px;">
@@ -257,6 +266,7 @@
                 </div>
             </div>
         </details>
+        {% endif %}
     </div>
 </div>
 
@@ -266,10 +276,12 @@
         <span id="backup-status-label" style="font-size:12px;color:var(--text-muted);">Loading...</span>
     </div>
     <div class="card-body" id="backup-section">
+        {% if not is_readonly %}
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
             <button id="backup-create-btn" style="padding:8px 20px;background:#27ae60;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Create Backup</button>
             <span id="backup-create-result" style="font-size:13px;color:var(--text-muted);"></span>
         </div>
+        {% endif %}
         <div id="backup-list"></div>
     </div>
 </div>
@@ -279,12 +291,14 @@
     <div class="card-body">
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
             <button id="refresh-pods" style="padding:8px 16px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Refresh Pods</button>
+            {% if not is_readonly %}
             {% for d in deployments %}
             {% set short = d.replace('deployment.apps/','') %}
             {% if 'fb-deploy' in short %}
             <button class="btn-action" data-deploy="{{ short }}" data-action="restart" style="padding:8px 16px;background:#e67e22;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Restart File Browser</button>
             {% endif %}
             {% endfor %}
+            {% endif %}
         </div>
         <div id="pods-output">
             <pre id="pods-text" style="background:#1a1a2e;color:#e0d5c7;padding:16px;border-radius:8px;font-size:12px;overflow-x:auto;white-space:pre-wrap;">Click refresh to load pod status...</pre>
@@ -292,6 +306,7 @@
     </div>
 </div>
 
+{% if not is_readonly %}
 <div class="card">
     <div class="card-header" style="cursor:pointer;" onclick="document.getElementById('debug-section').classList.toggle('hidden');">
         <span>🐛 Debug Logging</span>
@@ -354,6 +369,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <div class="card">
     <div class="card-header">
@@ -393,6 +409,8 @@
 
 {% block scripts %}
 <script>
+const isReadonly = {{ 'true' if is_readonly else 'false' }};
+
 // Auto-refresh node metrics every 5 seconds
 setInterval(async function() {
     try {
@@ -568,11 +586,13 @@ async function loadFwStatus() {
             const isBlocked = hasPort && (data.blocked || []).some(b => b.port === p.port);
             const rules = hasPort ? Object.values(data.iptables_rules || {}).filter(r => r.includes('dpt:' + p.port)) : [];
             const statusText = !hasPort ? '<span style="color:var(--text-muted);font-style:italic;">Not running</span>' : (isBlocked ? '<span style="color:#4ade80;font-weight:600;">Blocked</span>' : '<span style="color:#e74c3c;font-weight:600;">Open</span>');
-            const actionBtn = !hasPort
-                ? '<span style="color:var(--text-muted);font-size:11px;">Start battlegroup to enable</span>'
-                : (isBlocked
-                    ? `<button class="fw-btn" data-port="${p.port}" data-action="unblock" style="padding:4px 12px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Unblock</button>`
-                    : `<button class="fw-btn" data-port="${p.port}" data-action="block" style="padding:4px 12px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Block</button>`);
+            const actionBtn = isReadonly
+                ? '<span style="color:var(--text-muted);font-size:11px;">Read-only</span>'
+                : (!hasPort
+                    ? '<span style="color:var(--text-muted);font-size:11px;">Start battlegroup to enable</span>'
+                    : (isBlocked
+                        ? `<button class="fw-btn" data-port="${p.port}" data-action="unblock" style="padding:4px 12px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Unblock</button>`
+                        : `<button class="fw-btn" data-port="${p.port}" data-action="block" style="padding:4px 12px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Block</button>`));
             html += `<tr><td style="padding:6px 0;">${p.name}</td><td style="font-family:monospace;">${portDisplay}</td><td>${statusText}</td><td>${actionBtn}</td></tr>`;
         }
         html += '</tbody></table>';
@@ -832,11 +852,13 @@ async function loadSchedules() {
                     '<td style="padding:8px;font-size:11px;color:var(--text-muted);">' + nextStr + '</td>' +
                     '<td style="padding:8px;color:' + statusColor + ';font-weight:600;">' + statusText + '</td>' +
                     '<td style="padding:8px;display:flex;gap:6px;">' +
-                    '<button class="sched-toggle-btn" data-id="' + s.id + '" data-enabled="' + s.enabled + '" ' +
-                        'style="padding:3px 10px;font-size:12px;background:' + (s.enabled ? '#555' : '#27ae60') + ';color:#fff;border:none;border-radius:4px;cursor:pointer;">' +
-                        (s.enabled ? 'Disable' : 'Enable') + '</button>' +
-                    '<button class="sched-del-btn" data-id="' + s.id + '" data-label="' + (s.label || s.id) + '" ' +
-                        'style="padding:3px 10px;font-size:12px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;">Delete</button>' +
+                    (isReadonly ? '' :
+                        '<button class="sched-toggle-btn" data-id="' + s.id + '" data-enabled="' + s.enabled + '" ' +
+                            'style="padding:3px 10px;font-size:12px;background:' + (s.enabled ? '#555' : '#27ae60') + ';color:#fff;border:none;border-radius:4px;cursor:pointer;">' +
+                            (s.enabled ? 'Disable' : 'Enable') + '</button>' +
+                        '<button class="sched-del-btn" data-id="' + s.id + '" data-label="' + (s.label || s.id) + '" ' +
+                            'style="padding:3px 10px;font-size:12px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;">Delete</button>'
+                    ) +
                     '</td></tr>';
             }).join('') +
             '</tbody></table>';
@@ -1028,7 +1050,7 @@ async function loadBackups() {
                     <span style="color:var(--text-muted);margin-left:12px;">${formatBytes(b.size)}</span>
                     <span style="color:var(--text-muted);margin-left:12px;">${new Date(b.created_at).toLocaleString()}</span>
                 </div>
-                <button onclick="deleteBackup('${b.filename}')" style="padding:4px 12px;background:#c0392b;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Delete</button>
+                ${isReadonly ? '' : `<button onclick="deleteBackup('${b.filename}')" style="padding:4px 12px;background:#c0392b;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Delete</button>`}
             </div>
         `).join('');
     } catch(e) {}

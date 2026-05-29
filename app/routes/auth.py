@@ -2,7 +2,7 @@
 
 import time
 import threading
-from flask import render_template, request, redirect, url_for, flash
+from flask import render_template, request, redirect, url_for, flash, jsonify, abort
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -50,21 +50,24 @@ def _clear_failed_attempts(ip):
 
 
 class AdminUser(UserMixin):
-    def __init__(self, username):
+    def __init__(self, username, role='admin'):
         self.id = username
+        self.role = role
+
 
 def _get_all_accounts(auth):
-    """Return list of (username, password_hash) for all configured accounts."""
+    """Return list of (username, password_hash, role) for all configured accounts."""
     accounts = []
     primary_user = str(auth.get('username', ''))
     primary_hash = auth.get('password_hash')
     if primary_user and primary_hash:
-        accounts.append((primary_user, primary_hash))
+        accounts.append((primary_user, primary_hash, 'admin'))
     for extra in auth.get('accounts', []):
         u = str(extra.get('username', ''))
         h = extra.get('password_hash')
+        r = extra.get('role', 'admin')
         if u and h:
-            accounts.append((u, h))
+            accounts.append((u, h, r))
     return accounts
 
 
@@ -74,10 +77,23 @@ def init_auth(app, settings, limiter=None, audit_svc=None):
     @login_manager.user_loader
     def load_user(user_id):
         auth = settings.get('auth', {})
-        for username, _ in _get_all_accounts(auth):
+        for username, _, role in _get_all_accounts(auth):
             if username == str(user_id):
-                return AdminUser(user_id)
+                return AdminUser(user_id, role)
         return None
+
+    @app.before_request
+    def enforce_readonly():
+        if not current_user.is_authenticated:
+            return
+        if getattr(current_user, 'role', 'admin') != 'readonly':
+            return
+        # Block shell page entirely
+        if request.path.startswith('/shell'):
+            abort(403)
+        # Block all mutating methods
+        if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            return jsonify({'error': 'Read-only account', 'success': False}), 403
 
     def _apply_rate_limit(f):
         return limiter.limit("10 per minute")(f) if limiter else f
@@ -101,9 +117,11 @@ def init_auth(app, settings, limiter=None, audit_svc=None):
 
             accounts = _get_all_accounts(auth)
             matched_hash = None
-            for acct_user, acct_hash in accounts:
+            matched_role = 'admin'
+            for acct_user, acct_hash, acct_role in accounts:
                 if acct_user == u:
                     matched_hash = acct_hash
+                    matched_role = acct_role
                     break
 
             if matched_hash is None:
@@ -119,9 +137,9 @@ def init_auth(app, settings, limiter=None, audit_svc=None):
                     ph = PasswordHasher(time_cost=3, memory_cost=65536)
                     if ph.verify(matched_hash, p):
                         _clear_failed_attempts(client_ip)
-                        login_user(AdminUser(u))
+                        login_user(AdminUser(u, matched_role))
                         if audit_svc:
-                            audit_svc.log('login_success', {'username': u}, user=u, severity='info')
+                            audit_svc.log('login_success', {'username': u, 'role': matched_role}, user=u, severity='info')
                         return redirect(url_for('overview'))
                     else:
                         if audit_svc:

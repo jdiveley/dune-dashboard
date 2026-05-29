@@ -28,7 +28,7 @@
 {% if vitals and vitals.max_health %}
 <div class="vitals-bar">
     {% if not is_online %}
-    <button onclick="openModal('vitals-modal')" class="btn-edit" style="margin-right:8px;">Edit Vitals</button>
+    {% if not is_readonly %}<button onclick="openModal('vitals-modal')" class="btn-edit" style="margin-right:8px;">Edit Vitals</button>{% endif %}
     {% endif %}
     <div class="vitals-item">
         <span class="vitals-label">Health</span>
@@ -119,7 +119,7 @@
     <div class="card">
         <div class="card-header">Faction
             {% if not is_online %}
-            <button onclick="openModal('faction-modal')" class="btn-edit">Edit</button>
+            {% if not is_readonly %}<button onclick="openModal('faction-modal')" class="btn-edit">Edit</button>{% endif %}
             {% endif %}
         </div>
         <div class="card-body">
@@ -163,7 +163,7 @@
         </div>
         {% if is_online %}
         <div style="font-size:12px;color:#e67e22;padding:8px 16px;">Player is online &mdash; editing disabled. Log out first.</div>
-        {% else %}
+        {% elif not is_readonly %}
         <button onclick="openCurrenciesModal()" class="btn-edit" style="margin:8px 16px;">Edit</button>
         {% endif %}
         <div style="font-size:11px;color:var(--text-muted);padding:4px 16px 8px;">Read-only. Balances reflect last game save — game server writes deltas on top of DB value.</div>
@@ -173,7 +173,7 @@
 {% if specialization or tech_knowledge is not none %}
 <div class="detail-section">
     <h2>Specialization & XP
-        {% if not is_online %}
+        {% if not is_online and not is_readonly %}
         <button onclick="openModal('spec-modal')" class="btn-edit">Edit</button>
         {% endif %}
     </h2>
@@ -301,7 +301,7 @@
             {% if inv.inventory_type == 0 %}
             <div class="inv-section-header">
                 <span>{{ inv.inventory_type | inv_label }}<span class="inv-meta">(ID: {{ inv.id }}, Slots: {{ inv.max_item_count or '?' }}, Volume: {{ inv.max_item_volume or '?' }})</span></span>
-                {% if not is_online %}
+                {% if not is_online and not is_readonly %}
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
@@ -342,7 +342,7 @@
             {% elif inv.inventory_type == 1 %}
             <div class="inv-section-header">
                 <span>{{ inv.inventory_type | inv_label }}<span class="inv-meta">(ID: {{ inv.id }})</span></span>
-                {% if not is_online %}
+                {% if not is_online and not is_readonly %}
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
@@ -383,7 +383,7 @@
             {% elif inv.inventory_type == 5 %}
             <div class="inv-section-header">
                 <span>{{ inv.inventory_type | inv_label }}<span class="inv-meta">(ID: {{ inv.id }})</span></span>
-                {% if not is_online %}
+                {% if not is_online and not is_readonly %}
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
@@ -410,7 +410,7 @@
             {% elif inv.inventory_type == 15 %}
             <div class="inv-section-header">
                 <span>{{ inv.inventory_type | inv_label }}<span class="inv-meta">(ID: {{ inv.id }})</span></span>
-                {% if not is_online %}
+                {% if not is_online and not is_readonly %}
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
@@ -433,7 +433,7 @@
             {% else %}
             <div class="inv-section-header">
                 <span>{{ inv.inventory_type | inv_label }} (ID: {{ inv.id }})</span>
-                {% if not is_online %}
+                {% if not is_online and not is_readonly %}
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
@@ -510,7 +510,7 @@
             {% for inv in other_inventories %}
             <div class="inv-section-header">
                 <span>{{ inv.inventory_type | inv_label }} (ID: {{ inv.id }})</span>
-                {% if not is_online %}
+                {% if not is_online and not is_readonly %}
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
@@ -719,6 +719,8 @@
 
 {% block scripts %}
 <script>
+const isReadonly = {{ 'true' if is_readonly else 'false' }};
+
 function openModal(id) {
     document.getElementById(id).style.display = 'flex';
 }
@@ -846,6 +848,7 @@ async function editItem(itemId, field, currentValue) {
 }
 
 function openItemEditModal(itemId, templateName, stackSize, quality, durability, maxDurability, ammo, invId) {
+    if (isReadonly) return;
     document.getElementById('item-edit-item-id').value = itemId;
     document.getElementById('item-edit-inv-id').value = invId;
     document.getElementById('item-edit-name').textContent = templateName;
@@ -920,6 +923,7 @@ async function submitItemDelete() {
 }
 
 function openAddItemModal(invId) {
+    if (isReadonly) return;
     document.getElementById('add-item-inv-id').value = invId;
     openModal('add-item-modal');
 }

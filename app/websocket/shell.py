@@ -56,9 +56,17 @@ def register_websocket_handlers(socketio, settings):
         auth_enabled = settings.get('auth', {}).get('enabled', True)
         if auth_enabled:
             # Flask-Login stores user ID in session['_user_id']
-            if not session.get('_user_id'):
+            user_id = session.get('_user_id')
+            if not user_id:
                 logger.warning(f"WebSocket shell rejected: unauthenticated (sid={request.sid})")
                 return emit('shell_created', {'success': False, 'error': 'Authentication required'})
+            # Block readonly accounts from shell access
+            from app.routes.auth import _get_all_accounts
+            auth_cfg = settings.get('auth', {})
+            for uname, _, role in _get_all_accounts(auth_cfg):
+                if uname == str(user_id) and role == 'readonly':
+                    logger.warning(f"WebSocket shell rejected: readonly account {user_id} (sid={request.sid})")
+                    return emit('shell_created', {'success': False, 'error': 'Shell access not available for read-only accounts'})
 
         shell_type = data.get('type', 'vm')
         shell_id = request.sid

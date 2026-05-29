@@ -4,7 +4,7 @@
 
 <div class="page-header">
     <h1>Players</h1>
-    <p>{{ players|length }} player characters shown <button onclick="detectIps()" style="margin-left:15px;padding:4px 12px;background:var(--primary);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Detect IPs</button></p>
+    <p>{{ players|length }} player characters shown {% if not is_readonly %}<button onclick="detectIps()" style="margin-left:15px;padding:4px 12px;background:var(--primary);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Detect IPs</button>{% endif %}</p>
 </div>
 
 {% if tunnel_down %}
@@ -62,7 +62,7 @@
                     <th data-col="account">Account</th>
                     <th data-col="vehicles" class="sort-desc">Vehicles</th>
                     <th data-col="buildings">Buildings</th>
-                    <th>Actions</th>
+                    {% if not is_readonly %}<th>Actions</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -77,7 +77,7 @@
                     <td style="font-size:12px;">{{ p.funcom_id or p.account_email }}</td>
                     <td>{{ p.vehicle_count }}</td>
                     <td>{{ p.building_count }}</td>
-                    <td>{% if p.player_controller_id %}<button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="kick" style="padding:2px 8px;font-size:11px;background:#e67e22;color:#fff;border:none;border-radius:4px;cursor:pointer;">Kick</button> <button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="ban" style="padding:2px 8px;font-size:11px;background:#c0392b;color:#fff;border:none;border-radius:4px;cursor:pointer;">Ban</button> <button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="viewban" style="padding:2px 8px;font-size:11px;background:#3498db;color:#fff;border:none;border-radius:4px;cursor:pointer;">Info</button> <button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="history" style="padding:2px 8px;font-size:11px;background:#9b59b6;color:#fff;border:none;border-radius:4px;cursor:pointer;">History</button> <button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="unban" style="padding:2px 8px;font-size:11px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;">Unban</button>{% endif %}</td>
+                    {% if not is_readonly %}<td>{% if p.player_controller_id %}<button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="kick" style="padding:2px 8px;font-size:11px;background:#e67e22;color:#fff;border:none;border-radius:4px;cursor:pointer;">Kick</button> <button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="ban" style="padding:2px 8px;font-size:11px;background:#c0392b;color:#fff;border:none;border-radius:4px;cursor:pointer;">Ban</button> <button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="viewban" style="padding:2px 8px;font-size:11px;background:#3498db;color:#fff;border:none;border-radius:4px;cursor:pointer;">Info</button> <button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="history" style="padding:2px 8px;font-size:11px;background:#9b59b6;color:#fff;border:none;border-radius:4px;cursor:pointer;">History</button> <button class="btn-action" data-id="{{ p.player_controller_id }}" data-name="{{ p.player_name }}" data-action="unban" style="padding:2px 8px;font-size:11px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;">Unban</button>{% endif %}</td>{% endif %}
                 </tr>
                 {% else %}
                 <tr><td colspan="10" class="empty">No players found</td></tr>

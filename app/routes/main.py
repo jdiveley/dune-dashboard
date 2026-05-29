@@ -46,12 +46,17 @@ def register_routes(app, services, settings):
             INVENTORY_HIDDEN_TYPES, INVENTORY_UNKNOWN_TYPES, INVENTORY_PRIMARY_TYPES,
             EQUIPPED_SLOT_LABELS, QUALITY_TIERS,
         )
+        is_readonly = (
+            current_user.is_authenticated and
+            getattr(current_user, 'role', 'admin') == 'readonly'
+        )
         return dict(
             nav_pages=NAV_PAGES,
             current_path=request.path if request else '/',
             fmt_role=fmt_role,
             conn_ok=conn_ok,
             current_user=current_user,
+            is_readonly=is_readonly,
             inv_hidden_types=INVENTORY_HIDDEN_TYPES,
             inv_unknown_types=INVENTORY_UNKNOWN_TYPES,
             inv_primary_types=INVENTORY_PRIMARY_TYPES,

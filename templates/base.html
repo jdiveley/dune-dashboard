@@ -20,7 +20,9 @@
     <nav>
         <div class="brand">DUNE DASHBOARD</div>
         {% for href, label in nav_pages %}
+        {% if is_readonly and href == '/shell' %}{% else %}
         <a href="{{ href }}" class="{% if current_path == href %}active{% endif %}">{{ label }}</a>
+        {% endif %}
         {% endfor %}
         <div class="spacer"></div>
         <div class="theme-dropdown">

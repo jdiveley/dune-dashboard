@@ -14,9 +14,11 @@
                 <span id="view-mode-badge" class="badge">View Mode</span>
             </div>
             <div class="view-actions">
+                {% if not is_readonly %}
                 <button id="edit-btn" class="view-btn" onclick="toggleEdit()">Edit</button>
                 <button id="save-btn" class="view-btn primary" style="display:none;" onclick="saveFile()">Save</button>
                 <button id="cancel-btn" class="view-btn" style="display:none;" onclick="cancelEdit()">Cancel</button>
+                {% endif %}
             </div>
         </div>
         <div id="view-loading" style="padding:20px;text-align:center;color:var(--text-muted);">Loading file...</div>
