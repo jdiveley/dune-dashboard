@@ -70,6 +70,7 @@ DEFAULTS = {
         'enabled': True,
         'username': None,  # Must be set via setup
         'password_hash': None,  # Argon2 hash, never plaintext
+        'accounts': [],  # Additional accounts: [{username, password_hash}]
         'shell_enabled': True,
     },
     'logging': {

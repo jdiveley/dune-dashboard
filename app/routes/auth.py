@@ -53,14 +53,30 @@ class AdminUser(UserMixin):
     def __init__(self, username):
         self.id = username
 
+def _get_all_accounts(auth):
+    """Return list of (username, password_hash) for all configured accounts."""
+    accounts = []
+    primary_user = str(auth.get('username', ''))
+    primary_hash = auth.get('password_hash')
+    if primary_user and primary_hash:
+        accounts.append((primary_user, primary_hash))
+    for extra in auth.get('accounts', []):
+        u = str(extra.get('username', ''))
+        h = extra.get('password_hash')
+        if u and h:
+            accounts.append((u, h))
+    return accounts
+
+
 def init_auth(app, settings, limiter=None, audit_svc=None):
     login_manager.init_app(app)
 
     @login_manager.user_loader
     def load_user(user_id):
         auth = settings.get('auth', {})
-        if str(auth.get('username')) == str(user_id):
-            return AdminUser(user_id)
+        for username, _ in _get_all_accounts(auth):
+            if username == str(user_id):
+                return AdminUser(user_id)
         return None
 
     def _apply_rate_limit(f):
@@ -83,21 +99,25 @@ def init_auth(app, settings, limiter=None, audit_svc=None):
             p = request.form.get('password', '')
             auth = settings.get('auth', {})
 
-            cfg_u = str(auth.get('username', ''))
-            password_hash = auth.get('password_hash')
+            accounts = _get_all_accounts(auth)
+            matched_hash = None
+            for acct_user, acct_hash in accounts:
+                if acct_user == u:
+                    matched_hash = acct_hash
+                    break
 
-            if u != cfg_u:
+            if matched_hash is None:
                 if audit_svc:
                     audit_svc.log('login_failed', {'username': u, 'reason': 'invalid_username'}, user='unknown', severity='warning')
                 _record_failed_attempt(client_ip)
                 flash('Invalid username or password')
                 return render_template('login.html')
 
-            if password_hash:
+            if matched_hash:
                 try:
                     from argon2 import PasswordHasher, exceptions
                     ph = PasswordHasher(time_cost=3, memory_cost=65536)
-                    if ph.verify(password_hash, p):
+                    if ph.verify(matched_hash, p):
                         _clear_failed_attempts(client_ip)
                         login_user(AdminUser(u))
                         if audit_svc:
@@ -121,6 +141,75 @@ def init_auth(app, settings, limiter=None, audit_svc=None):
             flash('Invalid username or password')
 
         return render_template('login.html')
+
+    @app.route('/account/change-password', methods=['GET', 'POST'])
+    @login_required
+    def change_password():
+        if request.method == 'POST':
+            current_pw = request.form.get('current_password', '')
+            new_pw = request.form.get('new_password', '')
+            confirm_pw = request.form.get('confirm_password', '')
+
+            if not current_pw or not new_pw or not confirm_pw:
+                flash('All fields are required.')
+                return render_template('change_password.html')
+
+            if new_pw != confirm_pw:
+                flash('New passwords do not match.')
+                return render_template('change_password.html')
+
+            if len(new_pw) < 8:
+                flash('Password must be at least 8 characters.')
+                return render_template('change_password.html')
+
+            username = current_user.id
+            auth = settings.get('auth', {})
+
+            matched_hash = None
+            is_primary = str(auth.get('username', '')) == username
+            if is_primary:
+                matched_hash = auth.get('password_hash')
+            else:
+                for acct in auth.get('accounts', []):
+                    if str(acct.get('username', '')) == username:
+                        matched_hash = acct.get('password_hash')
+                        break
+
+            if not matched_hash:
+                flash('Account configuration error.')
+                return render_template('change_password.html')
+
+            try:
+                from argon2 import PasswordHasher, exceptions as argon_exc
+                ph = PasswordHasher(time_cost=3, memory_cost=65536)
+                ph.verify(matched_hash, current_pw)
+            except Exception:
+                if audit_svc:
+                    audit_svc.log('password_change_failed', {'username': username, 'reason': 'invalid_current_password'}, user=username, severity='warning')
+                flash('Current password is incorrect.')
+                return render_template('change_password.html')
+
+            from argon2 import PasswordHasher as _PH
+            new_hash = _PH(time_cost=3, memory_cost=65536).hash(new_pw)
+
+            if is_primary:
+                settings['auth']['password_hash'] = new_hash
+            else:
+                for acct in settings['auth'].get('accounts', []):
+                    if str(acct.get('username', '')) == username:
+                        acct['password_hash'] = new_hash
+                        break
+
+            from app.config import save_settings
+            save_settings(settings)
+
+            if audit_svc:
+                audit_svc.log('password_changed', {'username': username}, user=username, severity='info')
+
+            flash('Password changed successfully.')
+            return redirect(url_for('change_password'))
+
+        return render_template('change_password.html')
 
     @app.route('/logout')
     @login_required
