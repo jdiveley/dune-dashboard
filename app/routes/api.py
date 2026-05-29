@@ -104,6 +104,101 @@ def register_api_routes(app, services, settings):
             return jsonify(metrics)
         return jsonify({'cpu': 'N/A', 'memory': 'N/A'})
 
+    _MAIN_DISK_RE = re.compile(r'^(sd[a-z]+|nvme\d+n\d+|mmcblk\d+|vd[a-z]+|xvd[a-z]+)$')
+
+    def _parse_diskstats_api(output):
+        best = None
+        best_total = 0
+        for line in output.strip().split('\n'):
+            parts = line.split()
+            if len(parts) < 14:
+                continue
+            device = parts[2]
+            if not _MAIN_DISK_RE.match(device):
+                continue
+            rb = int(parts[5]) * 512
+            wb = int(parts[9]) * 512
+            if rb + wb > best_total:
+                best = (device, rb, wb)
+                best_total = rb + wb
+        return best if best else (None, 0, 0)
+
+    @app.route('/api/server/disk_io')
+    @auth_req
+    def server_disk_io():
+        from datetime import datetime, timezone as _tz, timedelta
+        import json as _json
+
+        # Get current /proc/diskstats from the game server VM
+        out, _, rc = ssh.run("cat /proc/diskstats", timeout=10)
+        if rc != 0:
+            return jsonify({'error': 'Could not read disk stats from server'})
+        device, cur_rb, cur_wb = _parse_diskstats_api(out)
+        if not device:
+            return jsonify({'error': 'No suitable disk device found'})
+
+        now = datetime.now(_tz.utc)
+        schema = db.dashboard_schema
+
+        def delta_for_window(hours=None, days=None):
+            if hours:
+                since = now - timedelta(hours=hours)
+            else:
+                since = now - timedelta(days=days)
+            row = db.query(
+                f"SELECT read_bytes, write_bytes FROM {schema}.disk_io_snapshots"
+                " WHERE captured_at >= %s AND device = %s ORDER BY captured_at ASC LIMIT 1",
+                (since, device), one=True
+            )
+            if not row:
+                return None
+            return {
+                'read': cur_rb - row['read_bytes'],
+                'write': cur_wb - row['write_bytes'],
+            }
+
+        # Since last BG restart: find oldest pod start time
+        since_restart = None
+        try:
+            out2, _, rc2 = k8s.run('get pods -o json', timeout=10)
+            if rc2 == 0:
+                items = _json.loads(out2).get('items', [])
+                oldest = None
+                for pod in items:
+                    name = pod.get('metadata', {}).get('name', '')
+                    short = name.split('-otgeen-', 1)[-1] if '-otgeen-' in name else name
+                    if short.startswith('db-') or short.startswith('fb-'):
+                        continue
+                    start = pod.get('status', {}).get('startTime')
+                    if start:
+                        dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                        if oldest is None or dt < oldest:
+                            oldest = dt
+                if oldest:
+                    row = db.query(
+                        f"SELECT read_bytes, write_bytes FROM {schema}.disk_io_snapshots"
+                        " WHERE captured_at >= %s AND device = %s ORDER BY captured_at ASC LIMIT 1",
+                        (oldest, device), one=True
+                    )
+                    if row:
+                        since_restart = {
+                            'read': cur_rb - row['read_bytes'],
+                            'write': cur_wb - row['write_bytes'],
+                            'since': oldest.isoformat(),
+                        }
+        except Exception as e:
+            logger.debug("Disk IO since_restart lookup failed: %s", e)
+
+        return jsonify({
+            'device': device,
+            'since_boot': {'read': cur_rb, 'write': cur_wb},
+            'hourly': delta_for_window(hours=1),
+            'daily': delta_for_window(days=1),
+            'weekly': delta_for_window(days=7),
+            'since_restart': since_restart,
+            'collected_at': now.isoformat(),
+        })
+
     # Battlegroup
     @app.route('/api/battlegroup/last_restart')
     @auth_req

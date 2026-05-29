@@ -178,8 +178,21 @@ class DatabaseService:
                     created_at TIMESTAMP NOT NULL DEFAULT NOW()
                 )
             """)
+            cur.execute(f"""
+                CREATE TABLE IF NOT EXISTS {schema}.disk_io_snapshots (
+                    id SERIAL PRIMARY KEY,
+                    captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    device TEXT NOT NULL,
+                    read_bytes BIGINT NOT NULL,
+                    write_bytes BIGINT NOT NULL
+                )
+            """)
+            cur.execute(f"""
+                CREATE INDEX IF NOT EXISTS disk_io_snapshots_captured_at_idx
+                    ON {schema}.disk_io_snapshots(captured_at)
+            """)
             conn.commit()
-            logger.info(f"Dashboard tables ensured in schema '{schema}' (player_ips, bans, player_actions)")
+            logger.info(f"Dashboard tables ensured in schema '{schema}' (player_ips, bans, player_actions, disk_io_snapshots)")
         except Exception as e:
             logger.warning(f"Failed to ensure dashboard tables: {e}")
             if conn:

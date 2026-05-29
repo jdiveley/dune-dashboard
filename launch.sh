@@ -22,7 +22,11 @@ start_bgd_pf() {
 }
 
 bgd_port_alive() {
-    $PYTHON -c "import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', $DIRECTOR_PORT)); s.close()" 2>/dev/null
+    # Check on the REMOTE side — local socket.connect() always succeeds because
+    # the SSH daemon accepts the TCP handshake before it attempts the remote
+    # forward, so a local TCP check never detects a dead port-forward.
+    ssh $SSH_OPTS "${SERVER_USER}@${SERVER_HOST}" \
+        "ss -tln 2>/dev/null | grep -q ':${DIRECTOR_PORT}'" 2>/dev/null
 }
 
 cleanup() {

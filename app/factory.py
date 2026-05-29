@@ -1,11 +1,13 @@
 """Application factory - creates and configures the Flask app"""
 
 import os
+import re
 import sys
 import time
 import logging
 import logging.handlers
 import threading
+from datetime import datetime, timezone, timedelta
 from flask import Flask, request, g
 from flask_login import current_user
 from flask_socketio import SocketIO
@@ -278,6 +280,53 @@ def create_app(settings_path=None):
     audit_svc = AuditService()
     services['audit'] = audit_svc
     scheduler_svc.audit = audit_svc
+
+    # Disk IO snapshot collector
+    _MAIN_DISK_RE = re.compile(r'^(sd[a-z]+|nvme\d+n\d+|mmcblk\d+|vd[a-z]+|xvd[a-z]+)$')
+
+    def _parse_diskstats(output):
+        best = None
+        best_total = 0
+        for line in output.strip().split('\n'):
+            parts = line.split()
+            if len(parts) < 14:
+                continue
+            device = parts[2]
+            if not _MAIN_DISK_RE.match(device):
+                continue
+            rb = int(parts[5]) * 512
+            wb = int(parts[9]) * 512
+            if rb + wb > best_total:
+                best = (device, rb, wb)
+                best_total = rb + wb
+        return best if best else (None, 0, 0)
+
+    def _disk_io_collector():
+        while True:
+            try:
+                out, _, rc = ssh_service.run("cat /proc/diskstats", timeout=10)
+                if rc == 0:
+                    device, rb, wb = _parse_diskstats(out)
+                    if device:
+                        now = datetime.now(timezone.utc)
+                        db_service.execute(
+                            f"INSERT INTO {db_service.dashboard_schema}.disk_io_snapshots"
+                            " (captured_at, device, read_bytes, write_bytes) VALUES (%s, %s, %s, %s)",
+                            (now, device, rb, wb)
+                        )
+                        cutoff = now - timedelta(days=8)
+                        db_service.execute(
+                            f"DELETE FROM {db_service.dashboard_schema}.disk_io_snapshots"
+                            " WHERE captured_at < %s",
+                            (cutoff,)
+                        )
+            except Exception as e:
+                logging.debug(f"Disk IO collector: {e}")
+            time.sleep(300)
+
+    _dio_thread = threading.Thread(target=_disk_io_collector, daemon=True)
+    _dio_thread.start()
+    logging.info("Disk IO collector: background snapshot thread started")
 
     # Track start time for uptime calculation
     import time

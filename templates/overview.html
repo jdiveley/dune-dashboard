@@ -116,6 +116,13 @@
         </div>
     </div>
 </div>
+
+<div class="card" style="margin-top:20px;">
+    <div class="card-header">Disk I/O <span id="disk-io-device" style="font-weight:400;font-size:0.85em;opacity:0.7;"></span></div>
+    <div class="card-body" id="disk-io-body">
+        <div style="opacity:0.6;text-align:center;padding:12px 0;">Loading…</div>
+    </div>
+</div>
 {% endif %}
 {% endblock %}
 
@@ -161,6 +168,94 @@
         .catch(() => {
             const el = document.getElementById('last-restart-value');
             if (el) { el.textContent = 'N/A'; }
+        });
+
+    // Disk I/O card
+    function fmtBytes(n) {
+        if (n === null || n === undefined || n < 0) return 'N/A';
+        if (n < 1024) return n + ' B';
+        if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+        if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+        return (n / 1073741824).toFixed(2) + ' GB';
+    }
+
+    function renderDiskIO(data) {
+        const body = document.getElementById('disk-io-body');
+        const devEl = document.getElementById('disk-io-device');
+        if (!body) return;
+
+        if (data.error) {
+            body.innerHTML = '<div style="opacity:0.6;text-align:center;padding:12px 0;">' + data.error + '</div>';
+            return;
+        }
+
+        if (devEl) devEl.textContent = '(' + data.device + ')';
+
+        const rows = [
+            {
+                label: 'Since Boot',
+                read: data.since_boot ? data.since_boot.read : null,
+                write: data.since_boot ? data.since_boot.write : null,
+                title: 'Cumulative since VM last booted',
+            },
+            {
+                label: 'Since Last Restart',
+                read: data.since_restart ? data.since_restart.read : null,
+                write: data.since_restart ? data.since_restart.write : null,
+                title: data.since_restart && data.since_restart.since
+                    ? 'Since BG restart at ' + fmtLocalTime(new Date(data.since_restart.since))
+                    : 'No snapshot yet for last restart window',
+                na_reason: !data.since_restart ? 'No snapshot near last restart yet' : null,
+            },
+            {
+                label: 'Last Hour',
+                read: data.hourly ? data.hourly.read : null,
+                write: data.hourly ? data.hourly.write : null,
+                na_reason: !data.hourly ? 'Collecting data (available after ~5 min)' : null,
+            },
+            {
+                label: 'Last 24 Hours',
+                read: data.daily ? data.daily.read : null,
+                write: data.daily ? data.daily.write : null,
+                na_reason: !data.daily ? 'Collecting data (available after ~24 h)' : null,
+            },
+            {
+                label: 'Last 7 Days',
+                read: data.weekly ? data.weekly.read : null,
+                write: data.weekly ? data.weekly.write : null,
+                na_reason: !data.weekly ? 'Collecting data (available after ~7 days)' : null,
+            },
+        ];
+
+        let html = '<table style="width:100%;border-collapse:collapse;">';
+        html += '<thead><tr>'
+            + '<th style="text-align:left;padding:6px 8px;opacity:0.6;font-weight:600;font-size:0.85em;border-bottom:1px solid var(--border);">Window</th>'
+            + '<th style="text-align:right;padding:6px 8px;opacity:0.6;font-weight:600;font-size:0.85em;border-bottom:1px solid var(--border);">Read</th>'
+            + '<th style="text-align:right;padding:6px 8px;opacity:0.6;font-weight:600;font-size:0.85em;border-bottom:1px solid var(--border);">Write</th>'
+            + '</tr></thead><tbody>';
+
+        rows.forEach((r, i) => {
+            const borderStyle = i < rows.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
+            const naTitle = r.na_reason ? ' title="' + r.na_reason + '"' : (r.title ? ' title="' + r.title + '"' : '');
+            html += '<tr' + naTitle + '>'
+                + '<td style="padding:7px 8px;' + borderStyle + '">' + r.label + '</td>'
+                + '<td style="text-align:right;padding:7px 8px;font-family:monospace;' + borderStyle + '">'
+                    + (r.read !== null ? fmtBytes(r.read) : '<span style="opacity:0.4;">—</span>') + '</td>'
+                + '<td style="text-align:right;padding:7px 8px;font-family:monospace;' + borderStyle + '">'
+                    + (r.write !== null ? fmtBytes(r.write) : '<span style="opacity:0.4;">—</span>') + '</td>'
+                + '</tr>';
+        });
+
+        html += '</tbody></table>';
+        body.innerHTML = html;
+    }
+
+    fetch('/api/server/disk_io')
+        .then(r => r.json())
+        .then(renderDiskIO)
+        .catch(() => {
+            const body = document.getElementById('disk-io-body');
+            if (body) body.innerHTML = '<div style="opacity:0.6;text-align:center;padding:12px 0;">Unable to fetch disk I/O data</div>';
         });
 })();
 </script>
