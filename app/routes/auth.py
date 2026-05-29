@@ -88,8 +88,8 @@ def init_auth(app, settings, limiter=None, audit_svc=None):
             return
         if getattr(current_user, 'role', 'admin') != 'readonly':
             return
-        # Block shell page entirely
-        if request.path.startswith('/shell'):
+        # Block shell page and password change entirely
+        if request.path.startswith('/shell') or request.path == '/account/change-password':
             abort(403)
         # Block all mutating methods
         if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
