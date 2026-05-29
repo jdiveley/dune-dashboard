@@ -123,13 +123,12 @@ def register_api_routes(app, services, settings):
                 best_total = rb + wb
         return best if best else (None, 0, 0)
 
-    @app.route('/api/server/disk_io')
+    @app.route('/api/server/disk_io_history')
     @auth_req
-    def server_disk_io():
+    def server_disk_io_history():
         from datetime import datetime, timezone as _tz, timedelta
         import json as _json
 
-        # Get current /proc/diskstats from the game server VM
         out, _, rc = ssh.run("cat /proc/diskstats", timeout=10)
         if rc != 0:
             return jsonify({'error': 'Could not read disk stats from server'})
@@ -140,32 +139,52 @@ def register_api_routes(app, services, settings):
         now = datetime.now(_tz.utc)
         schema = db.dashboard_schema
 
-        def delta_for_window(hours=None, days=None):
-            if hours:
-                since = now - timedelta(hours=hours)
-            else:
-                since = now - timedelta(days=days)
-            row = db.query(
-                f"SELECT read_bytes, write_bytes FROM {schema}.disk_io_snapshots"
-                " WHERE captured_at >= %s AND device = %s ORDER BY captured_at ASC LIMIT 1",
-                (since, device), one=True
+        def bucketed_series(since, bucket_expr):
+            """Return [{ts, read_bps, write_bps}] bucketed by bucket_expr."""
+            rows = db.query(
+                f"""SELECT
+                        {bucket_expr} AS bucket,
+                        MIN(read_bytes)  AS min_rb, MAX(read_bytes)  AS max_rb,
+                        MIN(write_bytes) AS min_wb, MAX(write_bytes) AS max_wb,
+                        EXTRACT(EPOCH FROM (MAX(captured_at) - MIN(captured_at))) AS dur_secs
+                    FROM {schema}.disk_io_snapshots
+                    WHERE device = %s AND captured_at >= %s
+                    GROUP BY bucket ORDER BY bucket""",
+                (device, since)
             )
-            if not row:
-                return None
-            return {
-                'read': cur_rb - row['read_bytes'],
-                'write': cur_wb - row['write_bytes'],
-            }
+            result = []
+            for r in rows:
+                dur = float(r['dur_secs'] or 0)
+                # max < min means the counter reset (VM reboot) — show 0
+                read_bps  = max(0, r['max_rb'] - r['min_rb'])  / dur if dur > 0 else 0
+                write_bps = max(0, r['max_wb'] - r['min_wb']) / dur if dur > 0 else 0
+                result.append({
+                    'ts': r['bucket'].isoformat(),
+                    'read_bps': read_bps,
+                    'write_bps': write_bps,
+                })
+            return result
 
-        # Since last BG restart: find oldest pod start time
-        since_restart = None
+        BUCKET_5MIN  = ("date_trunc('hour', captured_at)"
+                        " + (EXTRACT(MINUTE FROM captured_at)::int / 5)  * INTERVAL '5 minutes'")
+        BUCKET_15MIN = ("date_trunc('hour', captured_at)"
+                        " + (EXTRACT(MINUTE FROM captured_at)::int / 15) * INTERVAL '15 minutes'")
+        BUCKET_DAY   = "date_trunc('day', captured_at)"
+
+        hourly = bucketed_series(now - timedelta(hours=1),  BUCKET_5MIN)
+        daily  = bucketed_series(now - timedelta(hours=24), BUCKET_15MIN)
+        weekly = bucketed_series(now - timedelta(days=7),   BUCKET_DAY)
+
+        # Since last BG restart (5-min buckets)
+        since_restart = []
+        restart_time  = None
         try:
             out2, _, rc2 = k8s.run('get pods -o json', timeout=10)
             if rc2 == 0:
                 items = _json.loads(out2).get('items', [])
                 oldest = None
                 for pod in items:
-                    name = pod.get('metadata', {}).get('name', '')
+                    name  = pod.get('metadata', {}).get('name', '')
                     short = name.split('-otgeen-', 1)[-1] if '-otgeen-' in name else name
                     if short.startswith('db-') or short.startswith('fb-'):
                         continue
@@ -175,28 +194,20 @@ def register_api_routes(app, services, settings):
                         if oldest is None or dt < oldest:
                             oldest = dt
                 if oldest:
-                    row = db.query(
-                        f"SELECT read_bytes, write_bytes FROM {schema}.disk_io_snapshots"
-                        " WHERE captured_at >= %s AND device = %s ORDER BY captured_at ASC LIMIT 1",
-                        (oldest, device), one=True
-                    )
-                    if row:
-                        since_restart = {
-                            'read': cur_rb - row['read_bytes'],
-                            'write': cur_wb - row['write_bytes'],
-                            'since': oldest.isoformat(),
-                        }
+                    restart_time  = oldest.isoformat()
+                    since_restart = bucketed_series(oldest, BUCKET_5MIN)
         except Exception as e:
-            logger.debug("Disk IO since_restart lookup failed: %s", e)
+            logger.debug("Disk IO restart series failed: %s", e)
 
         return jsonify({
-            'device': device,
-            'since_boot': {'read': cur_rb, 'write': cur_wb},
-            'hourly': delta_for_window(hours=1),
-            'daily': delta_for_window(days=1),
-            'weekly': delta_for_window(days=7),
+            'device':        device,
+            'since_boot':    {'read': cur_rb, 'write': cur_wb},
+            'hourly':        hourly,
+            'daily':         daily,
+            'weekly':        weekly,
             'since_restart': since_restart,
-            'collected_at': now.isoformat(),
+            'restart_time':  restart_time,
+            'collected_at':  now.isoformat(),
         })
 
     # Battlegroup

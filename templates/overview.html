@@ -118,9 +118,27 @@
 </div>
 
 <div class="card" style="margin-top:20px;">
-    <div class="card-header">Disk I/O <span id="disk-io-device" style="font-weight:400;font-size:0.85em;opacity:0.7;"></span></div>
-    <div class="card-body" id="disk-io-body">
-        <div style="opacity:0.6;text-align:center;padding:12px 0;">Loading…</div>
+    <div class="card-header">
+        <span>Disk I/O <span id="disk-io-device" style="font-weight:400;font-size:0.85em;opacity:0.6;"></span></span>
+        <div id="disk-io-tabs" style="display:flex;gap:4px;">
+            <button class="dio-tab" data-tab="restart" style="background:none;border:1px solid var(--border);color:inherit;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:0.8em;opacity:0.6;">Restart</button>
+            <button class="dio-tab" data-tab="hourly"  style="background:none;border:1px solid var(--border);color:inherit;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:0.8em;opacity:0.6;">Hour</button>
+            <button class="dio-tab" data-tab="daily"   style="background:none;border:1px solid var(--border);color:inherit;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:0.8em;opacity:0.6;">Day</button>
+            <button class="dio-tab" data-tab="weekly"  style="background:none;border:1px solid var(--border);color:inherit;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:0.8em;opacity:0.6;">Week</button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:0.8em;opacity:0.65;">
+            <span id="disk-io-boot"></span>
+            <span id="disk-io-peak"></span>
+        </div>
+        <div id="disk-io-chart" style="min-height:150px;">
+            <div style="height:150px;display:flex;align-items:center;justify-content:center;opacity:0.4;">Loading…</div>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:10px;font-size:0.8em;opacity:0.7;">
+            <span><span style="display:inline-block;width:10px;height:10px;background:#4a9eff;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Read</span>
+            <span><span style="display:inline-block;width:10px;height:10px;background:#e07b39;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Write</span>
+        </div>
     </div>
 </div>
 {% endif %}
@@ -170,92 +188,154 @@
             if (el) { el.textContent = 'N/A'; }
         });
 
-    // Disk I/O card
+    // ── Disk I/O chart ────────────────────────────────────────────────
+    var _dioData = null;
+    var _dioTab  = 'restart';
+
     function fmtBytes(n) {
-        if (n === null || n === undefined || n < 0) return 'N/A';
+        if (!n || n < 0) return '0 B';
         if (n < 1024) return n + ' B';
         if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
         if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
         return (n / 1073741824).toFixed(2) + ' GB';
     }
 
-    function renderDiskIO(data) {
-        const body = document.getElementById('disk-io-body');
-        const devEl = document.getElementById('disk-io-device');
-        if (!body) return;
+    function fmtRate(bps) {
+        if (!bps || bps <= 0) return '0';
+        if (bps < 1024) return Math.round(bps) + ' B/s';
+        if (bps < 1048576) return (bps / 1024).toFixed(0) + ' KB/s';
+        return (bps / 1048576).toFixed(1) + ' MB/s';
+    }
 
-        if (data.error) {
-            body.innerHTML = '<div style="opacity:0.6;text-align:center;padding:12px 0;">' + data.error + '</div>';
+    function fmtAxisLabel(isoTs, tab) {
+        const d = new Date(isoTs);
+        if (tab === 'weekly') return d.toLocaleDateString([], {weekday: 'short', month: 'numeric', day: 'numeric'});
+        return d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    }
+
+    function drawDiskChart(series, tab) {
+        const el = document.getElementById('disk-io-chart');
+        const peakEl = document.getElementById('disk-io-peak');
+        if (!el) return;
+
+        if (!series || series.length === 0) {
+            el.innerHTML = '<div style="height:150px;display:flex;align-items:center;justify-content:center;opacity:0.4;">'
+                + 'No data yet — snapshots collected every 5 min</div>';
+            if (peakEl) peakEl.textContent = '';
             return;
         }
 
-        if (devEl) devEl.textContent = '(' + data.device + ')';
+        const W  = el.clientWidth || 600;
+        const H  = 150;
+        const PL = 52, PR = 8, PT = 6, PB = 26;
+        const cW = W - PL - PR;
+        const cH = H - PT - PB;
 
-        const rows = [
-            {
-                label: 'Since Boot',
-                read: data.since_boot ? data.since_boot.read : null,
-                write: data.since_boot ? data.since_boot.write : null,
-                title: 'Cumulative since VM last booted',
-            },
-            {
-                label: 'Since Last Restart',
-                read: data.since_restart ? data.since_restart.read : null,
-                write: data.since_restart ? data.since_restart.write : null,
-                title: data.since_restart && data.since_restart.since
-                    ? 'Since BG restart at ' + fmtLocalTime(new Date(data.since_restart.since))
-                    : 'No snapshot yet for last restart window',
-                na_reason: !data.since_restart ? 'No snapshot near last restart yet' : null,
-            },
-            {
-                label: 'Last Hour',
-                read: data.hourly ? data.hourly.read : null,
-                write: data.hourly ? data.hourly.write : null,
-                na_reason: !data.hourly ? 'Collecting data (available after ~5 min)' : null,
-            },
-            {
-                label: 'Last 24 Hours',
-                read: data.daily ? data.daily.read : null,
-                write: data.daily ? data.daily.write : null,
-                na_reason: !data.daily ? 'Collecting data (available after ~24 h)' : null,
-            },
-            {
-                label: 'Last 7 Days',
-                read: data.weekly ? data.weekly.read : null,
-                write: data.weekly ? data.weekly.write : null,
-                na_reason: !data.weekly ? 'Collecting data (available after ~7 days)' : null,
-            },
-        ];
+        const maxVal = Math.max(1, ...series.map(d => Math.max(d.read_bps || 0, d.write_bps || 0)));
+        const n = series.length;
+        const slotW = cW / n;
+        const bW = Math.max(1, slotW * 0.43);
 
-        let html = '<table style="width:100%;border-collapse:collapse;">';
-        html += '<thead><tr>'
-            + '<th style="text-align:left;padding:6px 8px;opacity:0.6;font-weight:600;font-size:0.85em;border-bottom:1px solid var(--border);">Window</th>'
-            + '<th style="text-align:right;padding:6px 8px;opacity:0.6;font-weight:600;font-size:0.85em;border-bottom:1px solid var(--border);">Read</th>'
-            + '<th style="text-align:right;padding:6px 8px;opacity:0.6;font-weight:600;font-size:0.85em;border-bottom:1px solid var(--border);">Write</th>'
-            + '</tr></thead><tbody>';
+        // Update peak label
+        const pR = Math.max(0, ...series.map(d => d.read_bps  || 0));
+        const pW = Math.max(0, ...series.map(d => d.write_bps || 0));
+        if (peakEl) peakEl.textContent = 'Peak  ' + fmtRate(pR) + ' read  ' + fmtRate(pW) + ' write';
 
-        rows.forEach((r, i) => {
-            const borderStyle = i < rows.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
-            const naTitle = r.na_reason ? ' title="' + r.na_reason + '"' : (r.title ? ' title="' + r.title + '"' : '');
-            html += '<tr' + naTitle + '>'
-                + '<td style="padding:7px 8px;' + borderStyle + '">' + r.label + '</td>'
-                + '<td style="text-align:right;padding:7px 8px;font-family:monospace;' + borderStyle + '">'
-                    + (r.read !== null ? fmtBytes(r.read) : '<span style="opacity:0.4;">—</span>') + '</td>'
-                + '<td style="text-align:right;padding:7px 8px;font-family:monospace;' + borderStyle + '">'
-                    + (r.write !== null ? fmtBytes(r.write) : '<span style="opacity:0.4;">—</span>') + '</td>'
-                + '</tr>';
+        // Y-axis scale: nice ceiling
+        const yTicks = [0, 0.25, 0.5, 0.75, 1.0];
+
+        let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H
+              + '" style="width:100%;height:' + H + 'px;display:block;">';
+
+        // Grid + Y labels
+        yTicks.forEach(function(t) {
+            const y = (PT + cH * (1 - t)).toFixed(1);
+            s += '<text x="' + (PL - 5) + '" y="' + (parseFloat(y) + 3.5).toFixed(1)
+               + '" text-anchor="end" font-size="9" fill="currentColor" opacity="0.45">'
+               + (t === 0 ? '0' : fmtRate(maxVal * t)) + '</text>';
+            if (t > 0) {
+                s += '<line x1="' + PL + '" y1="' + y + '" x2="' + (PL + cW) + '" y2="' + y
+                   + '" stroke="currentColor" stroke-opacity="0.08" stroke-dasharray="3,3"/>';
+            }
         });
 
-        html += '</tbody></table>';
-        body.innerHTML = html;
+        // Baseline
+        s += '<line x1="' + PL + '" y1="' + (PT + cH) + '" x2="' + (PL + cW) + '" y2="' + (PT + cH)
+           + '" stroke="currentColor" stroke-opacity="0.2"/>';
+
+        // Bars
+        series.forEach(function(d, i) {
+            const x  = PL + i * slotW;
+            const rH = Math.max(0, ((d.read_bps  || 0) / maxVal) * cH);
+            const wH = Math.max(0, ((d.write_bps || 0) / maxVal) * cH);
+            if (rH > 0)
+                s += '<rect x="' + x.toFixed(1) + '" y="' + (PT + cH - rH).toFixed(1)
+                   + '" width="' + bW.toFixed(1) + '" height="' + rH.toFixed(1)
+                   + '" fill="#4a9eff" opacity="0.82"/>';
+            if (wH > 0)
+                s += '<rect x="' + (x + bW + 1).toFixed(1) + '" y="' + (PT + cH - wH).toFixed(1)
+                   + '" width="' + bW.toFixed(1) + '" height="' + wH.toFixed(1)
+                   + '" fill="#e07b39" opacity="0.82"/>';
+        });
+
+        // X labels (max ~8 labels)
+        const step = Math.max(1, Math.ceil(n / 8));
+        series.forEach(function(d, i) {
+            if (i % step === 0 || i === n - 1) {
+                const x = (PL + (i + 0.5) * slotW).toFixed(1);
+                s += '<text x="' + x + '" y="' + (H - 7) + '" text-anchor="middle" font-size="9"'
+                   + ' fill="currentColor" opacity="0.4">' + fmtAxisLabel(d.ts, tab) + '</text>';
+            }
+        });
+
+        s += '</svg>';
+        el.innerHTML = s;
     }
 
-    fetch('/api/server/disk_io')
-        .then(r => r.json())
-        .then(renderDiskIO)
-        .catch(() => {
-            const body = document.getElementById('disk-io-body');
-            if (body) body.innerHTML = '<div style="opacity:0.6;text-align:center;padding:12px 0;">Unable to fetch disk I/O data</div>';
+    function dioSetTab(tab) {
+        _dioTab = tab;
+        document.querySelectorAll('.dio-tab').forEach(function(b) {
+            const active = b.dataset.tab === tab;
+            b.style.background     = active ? 'var(--primary)' : 'none';
+            b.style.color          = active ? '#fff' : 'inherit';
+            b.style.borderColor    = active ? 'var(--primary)' : 'var(--border)';
+            b.style.opacity        = active ? '1' : '0.6';
+        });
+        if (!_dioData) return;
+        const series = tab === 'restart' ? (_dioData.since_restart || [])
+                     : tab === 'hourly'  ? (_dioData.hourly  || [])
+                     : tab === 'daily'   ? (_dioData.daily   || [])
+                     :                     (_dioData.weekly  || []);
+        drawDiskChart(series, tab);
+    }
+
+    document.querySelectorAll('.dio-tab').forEach(function(btn) {
+        btn.addEventListener('click', function() { dioSetTab(btn.dataset.tab); });
+    });
+
+    fetch('/api/server/disk_io_history')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            _dioData = data;
+            if (data.error) {
+                const el = document.getElementById('disk-io-chart');
+                if (el) el.innerHTML = '<div style="height:150px;display:flex;align-items:center;justify-content:center;opacity:0.4;">' + data.error + '</div>';
+                return;
+            }
+            const devEl = document.getElementById('disk-io-device');
+            if (devEl) devEl.textContent = '(' + data.device + ')';
+            const bootEl = document.getElementById('disk-io-boot');
+            if (bootEl && data.since_boot)
+                bootEl.innerHTML = '<span style="color:#4a9eff">&#9650; ' + fmtBytes(data.since_boot.read)  + '</span>'
+                                 + '&nbsp;&nbsp;<span style="color:#e07b39">&#9660; ' + fmtBytes(data.since_boot.write) + '</span>'
+                                 + '&nbsp;since boot';
+            // Start on Restart tab if data exists, else fall back to hourly
+            const startTab = (data.since_restart && data.since_restart.length) ? 'restart' : 'hourly';
+            dioSetTab(startTab);
+        })
+        .catch(function() {
+            const el = document.getElementById('disk-io-chart');
+            if (el) el.innerHTML = '<div style="height:150px;display:flex;align-items:center;justify-content:center;opacity:0.4;">Unable to load disk I/O data</div>';
         });
 })();
 </script>
