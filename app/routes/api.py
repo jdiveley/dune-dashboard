@@ -1041,7 +1041,7 @@ def register_api_routes(app, services, settings):
         except Exception as e:
             error_msg = str(e)
             logger.error("Director battlegroup error: %s", e)
-            if 'refused' in error_msg.lower() or 'closed' in error_msg.lower() or 'aborted' in error_msg.lower():
+            if 'refused' in error_msg.lower() or 'closed' in error_msg.lower() or 'aborted' in error_msg.lower() or 'reset' in error_msg.lower():
                 return jsonify({
                     'success': False,
                     'error': 'Director unavailable',
@@ -1067,7 +1067,7 @@ def register_api_routes(app, services, settings):
 
             return result, 200, {'Content-Type': 'application/json'}
         except Exception as e:
-            if 'refused' in str(e).lower() or 'closed' in str(e).lower() or 'aborted' in str(e).lower():
+            if 'refused' in str(e).lower() or 'closed' in str(e).lower() or 'aborted' in str(e).lower() or 'reset' in str(e).lower():
                 return jsonify({'success': False, 'error': 'Director unavailable. The BGD service is not responding.'}), 503
             return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -1083,7 +1083,7 @@ def register_api_routes(app, services, settings):
                 director_svc.update_ini_section(map_name, {}, remove_section=True)
             return result, 200, {'Content-Type': 'application/json'}
         except Exception as e:
-            if 'refused' in str(e).lower() or 'closed' in str(e).lower() or 'aborted' in str(e).lower():
+            if 'refused' in str(e).lower() or 'closed' in str(e).lower() or 'aborted' in str(e).lower() or 'reset' in str(e).lower():
                 return jsonify({'success': False, 'error': 'Director unavailable. The BGD service is not responding.'}), 503
             return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -1096,7 +1096,7 @@ def register_api_routes(app, services, settings):
             data = director_svc.fetch_character_transfer_rules()
             return data, 200, {'Content-Type': 'application/json'}
         except Exception as e:
-            if 'refused' in str(e).lower() or 'closed' in str(e).lower() or 'aborted' in str(e).lower():
+            if 'refused' in str(e).lower() or 'closed' in str(e).lower() or 'aborted' in str(e).lower() or 'reset' in str(e).lower():
                 return jsonify({'success': False, 'error': 'Director unavailable. The BGD service is not responding.'}), 503
             return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -1115,7 +1115,7 @@ def register_api_routes(app, services, settings):
 
             return result, 200, {'Content-Type': 'application/json'}
         except Exception as e:
-            if 'refused' in str(e).lower() or 'closed' in str(e).lower() or 'aborted' in str(e).lower():
+            if 'refused' in str(e).lower() or 'closed' in str(e).lower() or 'aborted' in str(e).lower() or 'reset' in str(e).lower():
                 return jsonify({'success': False, 'error': 'Director unavailable. The BGD service is not responding.'}), 503
             return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -1129,7 +1129,7 @@ def register_api_routes(app, services, settings):
             director_svc.update_ini_section('CharacterTransfers', {}, remove_section=True)
             return result, 200, {'Content-Type': 'application/json'}
         except Exception as e:
-            if 'refused' in str(e).lower() or 'closed' in str(e).lower() or 'aborted' in str(e).lower():
+            if 'refused' in str(e).lower() or 'closed' in str(e).lower() or 'aborted' in str(e).lower() or 'reset' in str(e).lower():
                 return jsonify({'success': False, 'error': 'Director unavailable. The BGD service is not responding.'}), 503
             return jsonify({'success': False, 'error': str(e)}), 500
 
