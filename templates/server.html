@@ -201,14 +201,53 @@
 <div class="card">
     <div class="card-header">
         <span>Broadcast Message</span>
-        <span style="font-size:12px;color:var(--text-muted);">Saves to Dashboard Chat; in-game delivery requires <code>battlegroup.broadcast_command</code> in settings.yaml</span>
+        <span style="font-size:12px;color:var(--text-muted);">
+            {% if broadcast_sender %}
+                Sends in-game as <code>{{ broadcast_sender }}</code>
+            {% else %}
+                <span style="color:var(--warning, #f39c12);">&#9888; Sender not configured — messages will not appear in-game</span>
+            {% endif %}
+        </span>
     </div>
     <div class="card-body">
+        {% if not broadcast_sender %}
+        <div id="broadcast-setup-banner" style="background:rgba(243,156,18,0.12);border:1px solid rgba(243,156,18,0.4);border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:13px;">
+            <strong style="color:#f39c12;">Setup required:</strong> Choose a character to appear as the message sender in-game.
+            <a href="#broadcast-sender-config" style="color:#e67e22;margin-left:8px;" onclick="document.getElementById('broadcast-sender-config').style.display='block';this.style.display='none';">Configure now</a>
+        </div>
+        {% endif %}
         <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">
             <input type="text" id="broadcast-msg" maxlength="500" placeholder="Enter server announcement..." style="flex:1;min-width:220px;padding:9px 12px;background:#1a1a2e;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
             <button id="broadcast-btn" style="padding:9px 20px;background:#e67e22;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;">Send Broadcast</button>
         </div>
         <div id="broadcast-result" style="margin-top:8px;font-size:13px;display:none;"></div>
+
+        <div id="broadcast-sender-config" style="margin-top:14px;padding-top:14px;border-top:1px solid #333;{% if broadcast_sender %}display:none;{% endif %}">
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">
+                Broadcast sender identity
+                {% if broadcast_sender %}<span style="color:var(--success);">&#10003; Configured as <strong>{{ broadcast_sender }}</strong></span>{% endif %}
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <select id="broadcast-char-select" style="flex:1;min-width:200px;padding:8px 10px;background:#1a1a2e;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
+                    <option value="">— load characters —</option>
+                </select>
+                <button id="broadcast-char-load" onclick="loadBroadcastCharacters()" style="padding:8px 14px;background:#2a3a4a;color:#e0d5c7;border:1px solid #444;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;">Load Characters</button>
+                <button id="broadcast-char-save" onclick="saveBroadcastSender()" style="padding:8px 14px;background:#27ae60;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;">Save</button>
+            </div>
+            <div id="broadcast-sender-result" style="margin-top:6px;font-size:12px;display:none;"></div>
+            {% if broadcast_sender %}
+            <div style="margin-top:6px;font-size:12px;color:var(--text-muted);">
+                <a href="#" onclick="document.getElementById('broadcast-sender-config').style.display='none';return false;" style="color:var(--text-muted);">hide</a>
+                &nbsp;·&nbsp;
+                <a href="#" onclick="loadBroadcastCharacters();return false;" style="color:#e67e22;">change sender</a>
+            </div>
+            {% endif %}
+        </div>
+        {% if broadcast_sender %}
+        <div style="margin-top:8px;font-size:12px;">
+            <a href="#" onclick="document.getElementById('broadcast-sender-config').style.display=document.getElementById('broadcast-sender-config').style.display==='none'?'block':'none';return false;" style="color:var(--text-muted);">change sender</a>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endif %}
@@ -778,8 +817,17 @@ document.getElementById('broadcast-btn')?.addEventListener('click', async functi
         const data = await resp.json();
         result.style.display = 'block';
         if (data.success) {
-            result.style.color = 'var(--success)';
-            result.textContent = 'Broadcast sent and saved to Dashboard Chat.';
+            if (data.in_game) {
+                result.style.color = 'var(--success)';
+                result.textContent = 'Broadcast sent in-game and saved to Dashboard Chat.';
+            } else {
+                result.style.color = '#f39c12';
+                const reason = data.in_game_error || 'sender not configured';
+                result.textContent = 'Saved to Dashboard Chat, but in-game delivery failed: ' + reason;
+                if (reason.includes('broadcast_sender')) {
+                    result.innerHTML += ' — <a href="#broadcast-sender-config" onclick="document.getElementById(\'broadcast-sender-config\').style.display=\'block\'" style="color:#e67e22;">configure sender</a>';
+                }
+            }
             document.getElementById('broadcast-msg').value = '';
         } else {
             result.style.color = 'var(--danger)';
@@ -793,6 +841,60 @@ document.getElementById('broadcast-btn')?.addEventListener('click', async functi
     this.disabled = false;
     this.textContent = 'Send Broadcast';
 });
+
+async function loadBroadcastCharacters() {
+    const sel = document.getElementById('broadcast-char-select');
+    sel.innerHTML = '<option value="">Loading...</option>';
+    try {
+        const resp = await fetch('/api/battlegroup/broadcast/characters');
+        const data = await resp.json();
+        sel.innerHTML = '<option value="">— select a character —</option>';
+        (data.characters || []).forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = JSON.stringify({name: c.name, funcom_id: c.funcom_id});
+            opt.textContent = c.name + ' (' + c.funcom_id + ')';
+            sel.appendChild(opt);
+        });
+        if (!data.characters || data.characters.length === 0) {
+            sel.innerHTML = '<option value="">No characters found in database</option>';
+        }
+    } catch (e) {
+        sel.innerHTML = '<option value="">Error loading characters</option>';
+    }
+}
+
+async function saveBroadcastSender() {
+    const sel = document.getElementById('broadcast-char-select');
+    const result = document.getElementById('broadcast-sender-result');
+    if (!sel.value) {
+        result.style.display = 'block';
+        result.style.color = 'var(--danger)';
+        result.textContent = 'Select a character first.';
+        return;
+    }
+    const {name, funcom_id} = JSON.parse(sel.value);
+    try {
+        const resp = await csrfFetch('/api/battlegroup/broadcast/sender', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({sender_name: name, sender_funcom_id: funcom_id}),
+        });
+        const data = await resp.json();
+        result.style.display = 'block';
+        if (data.success) {
+            result.style.color = 'var(--success)';
+            result.textContent = 'Saved. Broadcasts will now appear as ' + name + '.';
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            result.style.color = 'var(--danger)';
+            result.textContent = 'Error: ' + (data.error || 'Failed');
+        }
+    } catch (e) {
+        result.style.display = 'block';
+        result.style.color = 'var(--danger)';
+        result.textContent = 'Error: ' + e.message;
+    }
+}
 
 // Scheduled restarts
 const DAY_ORDER = ['mon','tue','wed','thu','fri','sat','sun'];

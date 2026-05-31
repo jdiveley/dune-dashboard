@@ -1482,9 +1482,57 @@ def register_api_routes(app, services, settings):
         else:
             chat_svc.save_message(channel='System', sender='SYSTEM', message=message, is_admin=True)
 
+        bg_settings = settings.get('battlegroup', {})
+        sender_name = bg_settings.get('broadcast_sender_name', '')
+        sender_funcom_id = bg_settings.get('broadcast_sender_funcom_id', '')
+        in_game_ok, in_game_result = chat_svc.broadcast_chat(message, sender_name=sender_name, sender_funcom_id=sender_funcom_id)
+        if not in_game_ok:
+            logger.warning("In-game broadcast failed: %s", in_game_result)
+
         if audit_svc:
             audit_svc.log('battlegroup_broadcast', {'message': message[:80]}, user='admin', severity='info')
 
+        return jsonify({'success': True, 'in_game': in_game_ok, 'in_game_error': None if in_game_ok else in_game_result})
+
+    @app.route('/api/battlegroup/broadcast/characters', methods=['GET'])
+    @auth_req
+    @limiter.limit("60 per hour")
+    def broadcast_characters():
+        """Return all characters with their FuncomId for broadcast sender selection."""
+        try:
+            rows = db.query("""
+                SELECT DISTINCT
+                    acc.funcom_id,
+                    COALESCE(NULLIF(ps.character_name, ''), acc.funcom_id) as character_name
+                FROM dune.accounts acc
+                JOIN dune.encrypted_accounts ea ON acc.id = ea.id
+                JOIN dune.actors a ON a.owner_account_id = ea.id
+                LEFT JOIN dune.player_state ps ON ps.account_id = ea.id
+                WHERE acc.funcom_id IS NOT NULL AND acc.funcom_id != ''
+                ORDER BY character_name
+            """)
+            characters = [{'funcom_id': r['funcom_id'], 'name': r['character_name']} for r in (rows or [])]
+            return jsonify({'success': True, 'characters': characters})
+        except Exception as e:
+            logger.error("broadcast_characters: %s", e)
+            return jsonify({'success': False, 'error': str(e), 'characters': []})
+
+    @app.route('/api/battlegroup/broadcast/sender', methods=['POST'])
+    @auth_req
+    @limiter.limit("30 per hour")
+    def broadcast_sender_save():
+        """Save the broadcast sender identity to settings.yaml."""
+        data = request.get_json() or {}
+        sender_name = str(data.get('sender_name', '')).strip()
+        sender_funcom_id = str(data.get('sender_funcom_id', '')).strip()
+        if not sender_name or not sender_funcom_id:
+            return jsonify({'success': False, 'error': 'sender_name and sender_funcom_id are required'})
+        settings.setdefault('battlegroup', {})['broadcast_sender_name'] = sender_name
+        settings['battlegroup']['broadcast_sender_funcom_id'] = sender_funcom_id
+        from app.config import save_settings
+        save_settings(settings)
+        if audit_svc:
+            audit_svc.log('broadcast_sender_updated', {'sender_name': sender_name}, user='admin', severity='info')
         return jsonify({'success': True})
 
     # Backup API

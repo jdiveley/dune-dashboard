@@ -482,13 +482,16 @@ def register_routes(app, services, settings):
                             p['deployment'] = d
                             break
 
+            bg = settings.get('battlegroup', {})
+            broadcast_sender = bg.get('broadcast_sender_name', '')
             return render_template('server.html',
                 active_servers=active_servers, per_map=per_map,
                 online_players=online_players, partitions=partitions,
                 overmap_count=overmap_count.get('c') if overmap_count else 0,
                 online_count=online_count.get('c') if online_count else 0,
                 deployments=deployments, deploys_ok=True, ssh_error='',
-                node_metrics=node_metrics)
+                node_metrics=node_metrics,
+                broadcast_sender=broadcast_sender)
         except Exception as e:
             logger.exception("Error in server_status route")
             return render_template('server.html', db_error=f"{type(e).__name__}: {e}")

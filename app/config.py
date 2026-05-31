@@ -50,6 +50,11 @@ DEFAULTS = {
         # Use {message} as placeholder, e.g.:
         #   sudo kubectl exec -n <ns> <pod> -- /app/rcon broadcast {message}
         'broadcast_command': '',
+        # In-game identity for server broadcasts via RabbitMQ injection.
+        # Set to your admin character's display name and FuncomId (16-char hex).
+        # Messages will appear in-game as coming from this player.
+        'broadcast_sender_name': '',
+        'broadcast_sender_funcom_id': '',
     },
     'director': {
         'port': 32479,
