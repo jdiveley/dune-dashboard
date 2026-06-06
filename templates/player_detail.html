@@ -27,9 +27,7 @@
 
 {% if vitals and vitals.max_health %}
 <div class="vitals-bar">
-    {% if not is_online %}
     {% if not is_readonly %}<button onclick="openModal('vitals-modal')" class="btn-edit" style="margin-right:8px;">Edit Vitals</button>{% endif %}
-    {% endif %}
     <div class="vitals-item">
         <span class="vitals-label">Health</span>
         <span class="vitals-value" style="color:#e74c3c;">{{ "%.0f"|format(vitals.current_health or 0) }}/{{ "%.0f"|format(vitals.max_health or 0) }}</span>
@@ -60,7 +58,7 @@
     </div>
     {% endif %}
     {% if is_online %}
-    <div style="width:100%;font-size:11px;color:#e67e22;margin-top:4px;">Player is online &mdash; edit vitals only when offline. Health data is currently WIP.</div>
+    <div style="width:100%;font-size:11px;color:#e67e22;margin-top:4px;">Player is online &mdash; edits will take effect after they log out and back in.</div>
     {% endif %}
 </div>
 {% endif %}
@@ -118,9 +116,7 @@
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
     <div class="card">
         <div class="card-header">Faction
-            {% if not is_online %}
             {% if not is_readonly %}<button onclick="openModal('faction-modal')" class="btn-edit">Edit</button>{% endif %}
-            {% endif %}
         </div>
         <div class="card-body">
             {% if player.faction_name %}
@@ -161,9 +157,7 @@
             </table>
             <div style="font-size:10px;color:var(--text-muted);padding:4px 8px;">Note: Currency values may be stale due to game server behavior</div>
         </div>
-        {% if is_online %}
-        <div style="font-size:12px;color:#e67e22;padding:8px 16px;">Player is online &mdash; editing disabled. Log out first.</div>
-        {% elif not is_readonly %}
+        {% if not is_readonly %}
         <button onclick="openCurrenciesModal()" class="btn-edit" style="margin:8px 16px;">Edit</button>
         {% endif %}
         <div style="font-size:11px;color:var(--text-muted);padding:4px 16px 8px;">Read-only. Balances reflect last game save — game server writes deltas on top of DB value.</div>
@@ -173,7 +167,7 @@
 {% if specialization or tech_knowledge is not none %}
 <div class="detail-section">
     <h2>Specialization & XP
-        {% if not is_online and not is_readonly %}
+        {% if not is_readonly %}
         <button onclick="openModal('spec-modal')" class="btn-edit">Edit</button>
         {% endif %}
     </h2>
@@ -289,7 +283,7 @@
 <div class="detail-section">
     <h2>Inventory</h2>
     {% if is_online %}
-    <div style="font-size:12px;color:#e67e22;padding:0 16px 8px;">Player is online &mdash; editing disabled. Log out first.</div>
+    <div style="font-size:12px;color:#e67e22;padding:0 16px 8px;">Player is online &mdash; edits will take effect after they log out and back in.</div>
     {% endif %}
     <div class="experimental-banner">
         <span class="banner-icon">&#9888;</span>
@@ -301,7 +295,7 @@
             {% if inv.inventory_type == 0 %}
             <div class="inv-section-header">
                 <span>{{ inv.inventory_type | inv_label }}<span class="inv-meta">(ID: {{ inv.id }}, Slots: {{ inv.max_item_count or '?' }}, Volume: {{ inv.max_item_volume or '?' }})</span></span>
-                {% if not is_online and not is_readonly %}
+                {% if not is_readonly %}
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
@@ -342,7 +336,7 @@
             {% elif inv.inventory_type == 1 %}
             <div class="inv-section-header">
                 <span>{{ inv.inventory_type | inv_label }}<span class="inv-meta">(ID: {{ inv.id }})</span></span>
-                {% if not is_online and not is_readonly %}
+                {% if not is_readonly %}
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
@@ -383,7 +377,7 @@
             {% elif inv.inventory_type == 5 %}
             <div class="inv-section-header">
                 <span>{{ inv.inventory_type | inv_label }}<span class="inv-meta">(ID: {{ inv.id }})</span></span>
-                {% if not is_online and not is_readonly %}
+                {% if not is_readonly %}
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
@@ -410,7 +404,7 @@
             {% elif inv.inventory_type == 15 %}
             <div class="inv-section-header">
                 <span>{{ inv.inventory_type | inv_label }}<span class="inv-meta">(ID: {{ inv.id }})</span></span>
-                {% if not is_online and not is_readonly %}
+                {% if not is_readonly %}
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
@@ -433,7 +427,7 @@
             {% else %}
             <div class="inv-section-header">
                 <span>{{ inv.inventory_type | inv_label }} (ID: {{ inv.id }})</span>
-                {% if not is_online and not is_readonly %}
+                {% if not is_readonly %}
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
@@ -510,7 +504,7 @@
             {% for inv in other_inventories %}
             <div class="inv-section-header">
                 <span>{{ inv.inventory_type | inv_label }} (ID: {{ inv.id }})</span>
-                {% if not is_online and not is_readonly %}
+                {% if not is_readonly %}
                 <button onclick="openAddItemModal({{ inv.id }})" class="btn-edit" style="font-size:11px;padding:2px 8px;">+ Add Item</button>
                 {% endif %}
             </div>
@@ -656,18 +650,76 @@
 
 <!-- Add Item Modal -->
 <div id="add-item-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('add-item-modal')">
-    <div class="modal">
+    <div class="modal modal-wide">
         <h3>Add Item to Inventory</h3>
-        <form id="add-item-form" onsubmit="return submitAddItem()">
-            <input type="hidden" id="add-item-inv-id" name="inventory_id" value="">
-            <label>Template ID: <input type="text" name="template_id" placeholder="e.g. HealthPackRecipe" style="width:250px;"></label>
-            <label>Stack Size: <input type="number" name="stack_size" value="1" style="width:80px;"></label>
-            <label>Quality Level: <input type="number" name="quality_level" value="0" style="width:80px;"></label>
+        <input type="hidden" id="add-item-inv-id" value="">
+
+        <!-- Search state -->
+        <div id="catalog-search-state">
+            <input type="text" id="catalog-search-input" class="catalog-search-input"
+                   placeholder="Search by item name or template ID..."
+                   oninput="catalogSearch(this.value)" autocomplete="off">
+            <div id="catalog-results" class="catalog-results">
+                <div class="catalog-no-results">Type to search the item catalog&hellip;</div>
+            </div>
+            <div>
+                <a class="catalog-add-new-link" onclick="showNewItemForm()">Item not in catalog? Add it now</a>
+                <a class="catalog-sync-link" onclick="syncCatalog()" title="Fetch latest items from the catalog URL">Sync from URL</a>
+            </div>
+        </div>
+
+        <!-- Selected item state -->
+        <div id="catalog-selected-state" style="display:none;">
+            <div class="catalog-selected-card">
+                <div class="catalog-selected-name" id="selected-display-name"></div>
+                <div class="catalog-selected-meta" id="selected-meta"></div>
+            </div>
+            <div class="catalog-form-row">
+                <label>Stack Size</label>
+                <input type="number" id="add-item-stack" value="1" min="1">
+            </div>
+            <div id="add-item-ammo-row" class="catalog-form-row" style="display:none;">
+                <label>Ammo Count</label>
+                <input type="number" id="add-item-ammo" value="30" min="0">
+            </div>
             <div class="modal-actions">
-                <button type="submit" class="btn-save">Add</button>
+                <button type="button" onclick="submitAddItem()" class="btn-save">Add to Inventory</button>
+                <button type="button" onclick="resetCatalogSearch()" class="btn-cancel">Back</button>
                 <button type="button" onclick="closeModal('add-item-modal')" class="btn-cancel">Cancel</button>
             </div>
-        </form>
+        </div>
+
+        <!-- New item state -->
+        <div id="catalog-new-state" style="display:none;">
+            <p class="catalog-hint">Enter the item details to add it to the catalog and inject it into the inventory.</p>
+            <div class="catalog-form-row">
+                <label>Display Name</label>
+                <input type="text" id="new-item-name" placeholder="e.g. Crysknife">
+            </div>
+            <div class="catalog-form-row">
+                <label>Template ID &mdash; <a href="https://dune.gaming.tools/" target="_blank" rel="noopener" style="font-size:12px;color:var(--primary);">Look up IDs at dune.gaming.tools</a></label>
+                <input type="text" id="new-item-template" placeholder="e.g. CrysknifeT3">
+            </div>
+            <div class="catalog-form-row">
+                <label>Item Type</label>
+                <select id="new-item-type">
+                    <option value="resource">Resource / Consumable</option>
+                    <option value="tool">Tool / Module / Melee</option>
+                    <option value="weapon">Ranged Weapon</option>
+                    <option value="armor">Combat Armor</option>
+                    <option value="stillsuit">Stillsuit</option>
+                </select>
+            </div>
+            <div class="catalog-form-row">
+                <label>Default Stack Size</label>
+                <input type="number" id="new-item-stack" value="1" min="1">
+            </div>
+            <div class="modal-actions">
+                <button type="button" onclick="submitNewItem()" class="btn-save">Save &amp; Add</button>
+                <button type="button" onclick="showSearchState()" class="btn-cancel">Back</button>
+                <button type="button" onclick="closeModal('add-item-modal')" class="btn-cancel">Cancel</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -922,20 +974,129 @@ async function submitItemDelete() {
     }
 }
 
+let _selectedCatalogItem = null;
+let _catalogItems = [];
+let _searchDebounce = null;
+
+const CATALOG_TYPE_LABELS = {
+    resource: 'Resource/Consumable',
+    tool: 'Tool/Module/Melee',
+    weapon: 'Ranged Weapon',
+    armor: 'Combat Armor',
+    stillsuit: 'Stillsuit',
+};
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function openAddItemModal(invId) {
     if (isReadonly) return;
     document.getElementById('add-item-inv-id').value = invId;
+    resetCatalogSearch();
     openModal('add-item-modal');
+    setTimeout(() => document.getElementById('catalog-search-input').focus(), 50);
+}
+
+function resetCatalogSearch() {
+    _selectedCatalogItem = null;
+    _catalogItems = [];
+    document.getElementById('catalog-search-input').value = '';
+    document.getElementById('catalog-results').innerHTML = '<div class="catalog-no-results">Type to search the item catalog&hellip;</div>';
+    document.getElementById('catalog-search-state').style.display = '';
+    document.getElementById('catalog-selected-state').style.display = 'none';
+    document.getElementById('catalog-new-state').style.display = 'none';
+}
+
+function showNewItemForm() {
+    const q = document.getElementById('catalog-search-input').value.trim();
+    if (q && !q.includes(' ')) {
+        document.getElementById('new-item-template').value = q;
+    }
+    document.getElementById('catalog-search-state').style.display = 'none';
+    document.getElementById('catalog-selected-state').style.display = 'none';
+    document.getElementById('catalog-new-state').style.display = '';
+}
+
+function showSearchState() {
+    document.getElementById('catalog-search-state').style.display = '';
+    document.getElementById('catalog-selected-state').style.display = 'none';
+    document.getElementById('catalog-new-state').style.display = 'none';
+}
+
+function catalogSearch(query) {
+    clearTimeout(_searchDebounce);
+    const q = query.trim();
+    if (!q) {
+        document.getElementById('catalog-results').innerHTML = '<div class="catalog-no-results">Type to search the item catalog&hellip;</div>';
+        return;
+    }
+    _searchDebounce = setTimeout(async () => {
+        try {
+            const resp = await fetch(`/api/item_catalog?q=${encodeURIComponent(q)}`);
+            const data = await resp.json();
+            _catalogItems = data.items || [];
+            renderCatalogResults(_catalogItems);
+        } catch {
+            document.getElementById('catalog-results').innerHTML = '<div class="catalog-no-results">Search failed. Check connection.</div>';
+        }
+    }, 250);
+}
+
+function renderCatalogResults(items) {
+    const container = document.getElementById('catalog-results');
+    if (!items.length) {
+        container.innerHTML = '<div class="catalog-no-results">No items found &mdash; try a different search or use "Add it now" below.</div>';
+        return;
+    }
+    container.innerHTML = items.map((item, i) => `
+        <div class="catalog-result-item" onclick="selectCatalogItem(${i})">
+            <span class="catalog-result-name">${escHtml(item.display_name)}</span>
+            <span class="catalog-result-id">${escHtml(item.template_id)}</span>
+            <span class="catalog-result-type">${escHtml(CATALOG_TYPE_LABELS[item.item_type] || item.item_type)}</span>
+        </div>
+    `).join('');
+}
+
+function selectCatalogItem(index) {
+    const item = _catalogItems[index];
+    if (!item) return;
+    _selectedCatalogItem = item;
+
+    document.getElementById('selected-display-name').textContent = item.display_name;
+    document.getElementById('selected-meta').textContent =
+        item.template_id + '  ·  ' + (CATALOG_TYPE_LABELS[item.item_type] || item.item_type);
+    document.getElementById('add-item-stack').value = item.default_stack || 1;
+
+    const ammoRow = document.getElementById('add-item-ammo-row');
+    if (item.item_type === 'weapon') {
+        ammoRow.style.display = '';
+        document.getElementById('add-item-ammo').value = 30;
+    } else {
+        ammoRow.style.display = 'none';
+    }
+
+    document.getElementById('catalog-search-state').style.display = 'none';
+    document.getElementById('catalog-selected-state').style.display = '';
 }
 
 async function submitAddItem() {
-    const form = document.getElementById('add-item-form');
-    const data = new FormData(form);
+    if (!_selectedCatalogItem) return;
+    const invId = document.getElementById('add-item-inv-id').value;
+    const stack = document.getElementById('add-item-stack').value;
+    const data = new FormData();
+    data.append('inventory_id', invId);
+    data.append('template_id', _selectedCatalogItem.template_id);
+    data.append('item_type', _selectedCatalogItem.item_type);
+    data.append('stack_size', stack);
+    if (_selectedCatalogItem.item_type === 'weapon') {
+        data.append('ammo_count', document.getElementById('add-item-ammo').value);
+    }
     try {
         const resp = await csrfFetch('/api/add_item', { method: 'POST', body: data });
         const result = await resp.json();
         if (result.success) {
-            alert('Item added successfully!');
+            closeModal('add-item-modal');
             location.reload();
         } else {
             alert('Error: ' + (result.error || 'Unknown error'));
@@ -943,7 +1104,77 @@ async function submitAddItem() {
     } catch (e) {
         alert('Error: ' + e.message);
     }
-    return false;
+}
+
+async function submitNewItem() {
+    const displayName = document.getElementById('new-item-name').value.trim();
+    const templateId = document.getElementById('new-item-template').value.trim();
+    const itemType = document.getElementById('new-item-type').value;
+    const defaultStack = document.getElementById('new-item-stack').value;
+
+    if (!displayName || !templateId) {
+        alert('Please fill in Display Name and Template ID.');
+        return;
+    }
+
+    const catalogData = new FormData();
+    catalogData.append('template_id', templateId);
+    catalogData.append('display_name', displayName);
+    catalogData.append('item_type', itemType);
+    catalogData.append('default_stack', defaultStack);
+
+    try {
+        const catResp = await csrfFetch('/api/item_catalog/add', { method: 'POST', body: catalogData });
+        const catResult = await catResp.json();
+        if (!catResult.success && catResult.error !== 'Item already in catalog') {
+            alert('Catalog error: ' + catResult.error);
+            return;
+        }
+
+        const invId = document.getElementById('add-item-inv-id').value;
+        const data = new FormData();
+        data.append('inventory_id', invId);
+        data.append('template_id', templateId);
+        data.append('item_type', itemType);
+        data.append('stack_size', defaultStack);
+
+        const resp = await csrfFetch('/api/add_item', { method: 'POST', body: data });
+        const result = await resp.json();
+        if (result.success) {
+            closeModal('add-item-modal');
+            location.reload();
+        } else {
+            alert('Error: ' + (result.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function syncCatalog() {
+    const link = document.querySelector('.catalog-sync-link');
+    const orig = link.textContent;
+    link.textContent = 'Syncing…';
+    link.style.pointerEvents = 'none';
+    try {
+        const resp = await csrfFetch('/api/item_catalog/sync', { method: 'POST' });
+        const result = await resp.json();
+        if (result.success) {
+            link.textContent = `Done (+${result.added})`;
+            if (result.added > 0) {
+                const q = document.getElementById('catalog-search-input').value.trim();
+                if (q) catalogSearch(q);
+            }
+        } else {
+            alert('Sync failed: ' + result.error);
+            link.textContent = orig;
+        }
+    } catch (e) {
+        alert('Sync error: ' + e.message);
+        link.textContent = orig;
+    } finally {
+        link.style.pointerEvents = '';
+    }
 }
 </script>
 {% endblock %}

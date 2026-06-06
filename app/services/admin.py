@@ -189,16 +189,6 @@ class AdminService:
         if pawn_id is None or current_hydration is None or current_spice is None:
             return False, "Missing parameters"
 
-        controller_row = self.db.query(
-            "SELECT player_controller_id FROM dune.player_state WHERE player_pawn_id = %s LIMIT 1",
-            [pawn_id], one=True
-        )
-        if controller_row:
-            from app.services.player import PlayerService
-            ps = PlayerService(self.db)
-            if ps.is_online(controller_row['player_controller_id']):
-                return False, "Player must be offline to edit vitals. Log out first."
-
         health = max(0.0, float(current_health)) if current_health is not None else None
         max_h = max(0.0, float(max_health)) if max_health is not None else None
         hydration = max(0.0, float(current_hydration))
@@ -757,7 +747,7 @@ class AdminService:
                 cur.close()
             self.db.return_connection(conn)
 
-    def add_item(self, inventory_id, template_id, stack_size=1, quality_level=0):
+    def add_item(self, inventory_id, template_id, stack_size=1, quality_level=0, stats_json=None):
         if inventory_id is None or template_id is None:
             return False, "Missing inventory_id or template_id"
         try:
@@ -768,6 +758,8 @@ class AdminService:
             quality_level = int(quality_level)
         except (ValueError, TypeError):
             quality_level = 0
+        if stats_json is None:
+            stats_json = '{}'
 
         conn = self.db.get_connection()
         if not conn:
@@ -782,10 +774,18 @@ class AdminService:
                 return False, "Inventory not found"
 
             cur.execute("""
-                INSERT INTO dune.items (inventory_id, template_id, stack_size, quality_level, is_new, position_index, stats)
-                VALUES (%s, %s, %s, %s, FALSE, (SELECT COALESCE(MAX(position_index), 0) + 1 FROM dune.items WHERE inventory_id = %s), '{}')
+                INSERT INTO dune.items (
+                    inventory_id, template_id, stack_size, quality_level,
+                    is_new, acquisition_time, position_index, stats, volume_override
+                )
+                VALUES (
+                    %s, %s, %s, %s,
+                    TRUE, EXTRACT(EPOCH FROM NOW())::bigint,
+                    (SELECT COALESCE(MAX(position_index), 0) + 1 FROM dune.items WHERE inventory_id = %s),
+                    %s, 0
+                )
                 RETURNING id
-            """, [inventory_id, template_id, stack_size, quality_level, inventory_id])
+            """, [inventory_id, template_id, stack_size, quality_level, inventory_id, stats_json])
             row = cur.fetchone()
             conn.commit()
             if row:
