@@ -30,6 +30,8 @@ ADMIN_ENDPOINTS = [
     ("get", "/api/item_catalog"),
     ("post", "/api/item_catalog/add"),
     ("post", "/api/item_catalog/sync"),
+    ("post", "/api/player/1/teleport"),
+    ("post", "/api/player/1/whisper"),
 ]
 
 

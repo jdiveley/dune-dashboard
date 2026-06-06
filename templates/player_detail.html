@@ -64,7 +64,14 @@
 {% endif %}
 
 <div class="detail-section">
-    <h2>Account Info</h2>
+    <h2>Account Info
+        {% if not is_readonly %}
+        <button onclick="openTeleportModal()" class="btn-edit" style="margin-left:8px;">Teleport</button>
+        {% if is_online %}
+        <button onclick="openWhisperModal()" class="btn-edit" style="margin-left:6px;">Whisper</button>
+        {% endif %}
+        {% endif %}
+    </h2>
     <div class="detail-grid">
         <div class="detail-item">
             <div class="dlabel">Character Name</div>
@@ -559,6 +566,61 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Teleport Modal -->
+{% if not is_readonly %}
+<div id="teleport-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('teleport-modal')">
+    <div class="modal" style="max-width:420px;">
+        <h3>Teleport Player</h3>
+        {% if player.pos_x is not none %}
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
+            Current position: <code>{{ "%.0f"|format(player.pos_x or 0) }}, {{ "%.0f"|format(player.pos_y or 0) }}, {{ "%.0f"|format(player.pos_z or 0) }}</code>
+        </div>
+        {% endif %}
+        {% if is_online %}
+        <div style="font-size:12px;color:#2ecc71;margin-bottom:8px;">Player is online &mdash; teleport is immediate.</div>
+        {% else %}
+        <div style="font-size:12px;color:#e67e22;margin-bottom:8px;">Player is offline &mdash; position will update on next login.</div>
+        {% endif %}
+        <div class="catalog-form-row">
+            <label>X</label>
+            <input type="number" id="tp-x" step="1" placeholder="0" style="width:100%;">
+        </div>
+        <div class="catalog-form-row">
+            <label>Y</label>
+            <input type="number" id="tp-y" step="1" placeholder="0" style="width:100%;">
+        </div>
+        <div class="catalog-form-row">
+            <label>Z</label>
+            <input type="number" id="tp-z" step="1" placeholder="0" style="width:100%;">
+        </div>
+        <div id="tp-status" style="display:none;font-size:13px;margin-top:8px;"></div>
+        <div class="modal-actions">
+            <button type="button" id="tp-btn" onclick="submitTeleport()" class="btn-save">Teleport</button>
+            <button type="button" onclick="closeModal('teleport-modal')" class="btn-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Whisper Modal -->
+<div id="whisper-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('whisper-modal')">
+    <div class="modal" style="max-width:420px;">
+        <h3>GM Whisper</h3>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
+            Sends a private message to <strong>{{ player.player_name }}</strong> visible only to them.
+        </div>
+        <div class="catalog-form-row">
+            <label>Message</label>
+            <textarea id="whisper-msg" rows="3" style="width:100%;resize:vertical;" placeholder="Enter your message…" maxlength="500"></textarea>
+        </div>
+        <div id="whisper-status" style="display:none;font-size:13px;margin-top:8px;"></div>
+        <div class="modal-actions">
+            <button type="button" id="whisper-btn" onclick="submitWhisper()" class="btn-save">Send</button>
+            <button type="button" onclick="closeModal('whisper-modal')" class="btn-cancel">Cancel</button>
         </div>
     </div>
 </div>
@@ -1258,6 +1320,96 @@ function onPkgSelect() {
         const txt = [pkg.description, `${pkg.item_count} item${pkg.item_count !== 1 ? 's' : ''}`].filter(Boolean).join(' · ');
         document.getElementById('give-pkg-preview-text').textContent = txt;
         preview.style.display = '';
+    }
+}
+
+function openTeleportModal() {
+    document.getElementById('tp-x').value = '';
+    document.getElementById('tp-y').value = '';
+    document.getElementById('tp-z').value = '';
+    document.getElementById('tp-status').style.display = 'none';
+    document.getElementById('tp-btn').disabled = false;
+    document.getElementById('tp-btn').textContent = 'Teleport';
+    document.getElementById('teleport-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('tp-x').focus(), 50);
+}
+
+async function submitTeleport() {
+    const x = document.getElementById('tp-x').value.trim();
+    const y = document.getElementById('tp-y').value.trim();
+    const z = document.getElementById('tp-z').value.trim();
+    if (x === '' || y === '' || z === '') { alert('X, Y, and Z are required.'); return; }
+    const btn = document.getElementById('tp-btn');
+    const status = document.getElementById('tp-status');
+    btn.disabled = true;
+    btn.textContent = 'Teleporting…';
+    status.style.display = 'none';
+    try {
+        const data = new FormData();
+        data.append('x', x); data.append('y', y); data.append('z', z);
+        const r = await csrfFetch('/api/player/{{ player.player_controller_id }}/teleport', { method: 'POST', body: data });
+        const j = await r.json();
+        status.style.display = '';
+        if (j.success) {
+            status.style.color = 'var(--success, #2ecc71)';
+            status.textContent = j.message;
+            btn.textContent = 'Done';
+            setTimeout(() => closeModal('teleport-modal'), 2000);
+        } else {
+            status.style.color = '#e74c3c';
+            status.textContent = j.error;
+            btn.disabled = false;
+            btn.textContent = 'Teleport';
+        }
+    } catch(e) {
+        status.style.display = '';
+        status.style.color = '#e74c3c';
+        status.textContent = 'Request failed.';
+        btn.disabled = false;
+        btn.textContent = 'Teleport';
+    }
+}
+
+function openWhisperModal() {
+    document.getElementById('whisper-msg').value = '';
+    document.getElementById('whisper-status').style.display = 'none';
+    document.getElementById('whisper-btn').disabled = false;
+    document.getElementById('whisper-btn').textContent = 'Send';
+    document.getElementById('whisper-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('whisper-msg').focus(), 50);
+}
+
+async function submitWhisper() {
+    const message = document.getElementById('whisper-msg').value.trim();
+    if (!message) { alert('Message cannot be empty.'); return; }
+    const btn = document.getElementById('whisper-btn');
+    const status = document.getElementById('whisper-status');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    status.style.display = 'none';
+    try {
+        const data = new FormData();
+        data.append('message', message);
+        const r = await csrfFetch('/api/player/{{ player.player_controller_id }}/whisper', { method: 'POST', body: data });
+        const j = await r.json();
+        status.style.display = '';
+        if (j.success) {
+            status.style.color = 'var(--success, #2ecc71)';
+            status.textContent = j.message;
+            btn.textContent = 'Sent';
+            setTimeout(() => closeModal('whisper-modal'), 2000);
+        } else {
+            status.style.color = '#e74c3c';
+            status.textContent = j.error;
+            btn.disabled = false;
+            btn.textContent = 'Send';
+        }
+    } catch(e) {
+        status.style.display = '';
+        status.style.color = '#e74c3c';
+        status.textContent = 'Request failed.';
+        btn.disabled = false;
+        btn.textContent = 'Send';
     }
 }
 

@@ -1840,3 +1840,40 @@ def register_api_routes(app, services, settings):
             })
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/teleport', methods=['POST'])
+    @auth_req
+    def api_teleport_player(player_id):
+        try:
+            x = request.form.get('x', type=float)
+            y = request.form.get('y', type=float)
+            z = request.form.get('z', type=float)
+            if x is None or y is None or z is None:
+                return jsonify({'success': False, 'error': 'x, y, and z are required'})
+            success, msg = admin_svc.teleport_player(player_id, x, y, z)
+            if success:
+                return jsonify({'success': True, 'message': msg})
+            return jsonify({'success': False, 'error': msg})
+        except Exception as e:
+            logger.error(f"teleport_player error: {e}")
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/whisper', methods=['POST'])
+    @auth_req
+    def api_whisper_player(player_id):
+        try:
+            message = (request.form.get('message') or '').strip()
+            if not message:
+                return jsonify({'success': False, 'error': 'Message is required'})
+            bg_settings = settings.get('battlegroup', {})
+            sender_name = bg_settings.get('broadcast_sender_name') or 'Admin'
+            sender_funcom_id = bg_settings.get('broadcast_sender_funcom_id') or ''
+            if not sender_funcom_id:
+                return jsonify({'success': False, 'error': 'broadcast_sender_funcom_id must be configured in settings.yaml under battlegroup'})
+            success, msg = admin_svc.send_whisper(player_id, message, sender_name, sender_funcom_id)
+            if success:
+                return jsonify({'success': True, 'message': msg})
+            return jsonify({'success': False, 'error': msg})
+        except Exception as e:
+            logger.error(f"whisper_player error: {e}")
+            return jsonify({'success': False, 'error': str(e)})

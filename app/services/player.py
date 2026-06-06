@@ -184,6 +184,9 @@ class PlayerService:
     def get_player_detail(self, player_id):
         player = self.db.query("""
             SELECT a.*, a.transform::text as transform_text,
+                ((a.transform).location).x as pos_x,
+                ((a.transform).location).y as pos_y,
+                ((a.transform).location).z as pos_z,
                 ea.id as account_id, ea.user as account_email, ea.platform_id,
                 acc.funcom_id,
                 COALESCE(NULLIF(ps.character_name, ''), NULLIF(acc.funcom_id, ''), 'Character ' || a.id::text) as player_name,

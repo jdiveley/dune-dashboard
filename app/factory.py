@@ -233,7 +233,7 @@ def create_app(settings_path=None):
     vehicle_svc = VehicleService(db_service)
     chat_svc = ChatService(db_service, k8s_service, ssh_service, static_cache)
     logging.debug("ChatService initialized")
-    admin_svc = AdminService(db_service, ssh_service)
+    admin_svc = AdminService(db_service, ssh_service, k8s_service)
     logging.debug("AdminService initialized")
     updater_svc = UpdateService(base_dir)
     logging.debug("UpdateService initialized")

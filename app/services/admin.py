@@ -22,9 +22,10 @@ def _validate_ip(ip):
 class AdminService:
     _iptables_lock = threading.Lock()
 
-    def __init__(self, db_service, ssh_service):
+    def __init__(self, db_service, ssh_service, k8s_service=None):
         self.db = db_service
         self.ssh = ssh_service
+        self.k8s = k8s_service
 
     def ban_player(self, player_id, duration=0, reason='', note=''):
         try:
@@ -746,6 +747,148 @@ class AdminService:
             if cur:
                 cur.close()
             self.db.return_connection(conn)
+
+    def _run_erlang_on_mq_game(self, erlang_script):
+        """Write an Erlang script to the mq-game pod and eval it via rabbitmqctl."""
+        import base64 as _b64
+        if not self.k8s:
+            return False, "K8s service not available"
+        pod_name = self.k8s.find_pod_by_pattern('mq-game')
+        if not pod_name:
+            return False, "No mq-game pod found"
+        namespace = self.k8s.namespace
+        script_path = '/tmp/dashboard_admin_cmd.erl'
+        script_b64 = _b64.b64encode(erlang_script.encode('utf-8')).decode('ascii')
+        _, err, rc = self.ssh.run(f"echo '{script_b64}' | base64 -d > {script_path}", timeout=10)
+        if rc != 0:
+            return False, f"Failed to write script: {err}"
+        _, err, rc = self.ssh.run(f"sudo kubectl cp {script_path} {namespace}/{pod_name}:{script_path}", timeout=30)
+        if rc != 0:
+            return False, f"Failed to copy script to pod: {err}"
+        out, err, rc = self.ssh.run(f"sudo kubectl exec -n {namespace} {pod_name} -- rabbitmqctl eval_file {script_path}", timeout=30)
+        if rc != 0:
+            return False, f"RabbitMQ error: {(err or out or '')[:200]}"
+        return True, out.strip()
+
+    def teleport_player(self, player_controller_id, x, y, z):
+        """Teleport a player to XYZ coordinates.
+        Online: publishes TeleportTo server command via RabbitMQ heartbeats exchange.
+        Offline: calls admin_move_offline_player_to_partition DB stored procedure.
+        """
+        import json as _json, base64 as _b64, time as _time
+        row = self.db.query("""
+            SELECT ea.platform_id, ps.online_status::text as online_status,
+                   COALESCE(a.partition_id, 0) as partition_id
+            FROM dune.player_state ps
+            JOIN dune.encrypted_accounts ea ON ea.id = ps.account_id
+            LEFT JOIN dune.actors a ON a.id = ps.player_pawn_id
+            WHERE ps.player_controller_id = %s
+            LIMIT 1
+        """, [player_controller_id], one=True)
+        if not row:
+            return False, "Player not found"
+        hex_id = row.get('platform_id') or ''
+        is_online = str(row.get('online_status', '')).lower() == 'online'
+        x, y, z = float(x), float(y), float(z)
+        if is_online:
+            if not self.k8s:
+                return False, "K8s service not available for online teleport"
+            inner = _json.dumps({"ServerCommand": "TeleportTo", "PlayerId": hex_id, "X": x, "Y": y, "Z": z}, separators=(',', ':'))
+            outer = _json.dumps({"Version": 2, "AuthToken": "Nu6VmPWUMvdPMeB7qErr", "MessageContent": inner}, separators=(',', ':'))
+            outer_b64 = _b64.b64encode(outer.encode('utf-8')).decode('ascii')
+            msg_id = f"dashboard-cmd-{int(_time.time() * 1000)}"
+            erlang = (
+                f'Outer = base64:decode(<<"{outer_b64}">>),\n'
+                f'XName = rabbit_misc:r(<<"/">>, exchange, <<"heartbeats">>),\n'
+                f'X = rabbit_exchange:lookup_or_die(XName),\n'
+                f'MsgId = <<"{msg_id}">>,\n'
+                f'Tag = binary_to_atom(<<"P_basic">>, utf8),\n'
+                f'P = {{Tag, <<"Content">>, undefined, [], undefined, undefined, undefined, undefined, undefined, MsgId, undefined, undefined, <<"fls">>, <<"fls_backend">>, undefined}},\n'
+                f'Content = rabbit_basic:build_content(P, Outer),\n'
+                f'{{ok, Msg}} = rabbit_basic:message(XName, <<"notifications">>, Content),\n'
+                f'rabbit_queue_type:publish_at_most_once(X, Msg).\n'
+            )
+            ok, result = self._run_erlang_on_mq_game(erlang)
+            if ok:
+                audit_logger.info(f"TELEPORT: player={player_controller_id} hex={hex_id} x={x} y={y} z={z} method=online_rmq")
+                return True, f"Teleport command sent"
+            return False, result
+        else:
+            partition_id = int(row.get('partition_id') or 0)
+            try:
+                ok = self.db.execute(
+                    "SELECT dune.admin_move_offline_player_to_partition(%s::text, %s::bigint, ROW(%s::float8, %s::float8, %s::float8)::dune.Vector)",
+                    [hex_id, partition_id, x, y, z]
+                )
+                if ok:
+                    audit_logger.info(f"TELEPORT: player={player_controller_id} hex={hex_id} x={x} y={y} z={z} method=offline_db partition={partition_id}")
+                    return True, "Player position updated — will appear at coordinates on next login"
+                return False, "Teleport stored procedure returned no result"
+            except Exception as e:
+                logger.error(f"Offline teleport failed for {player_controller_id}: {e}")
+                return False, f"Offline teleport failed: {e}"
+
+    def send_whisper(self, player_controller_id, message, sender_name, sender_funcom_id):
+        """Send a GM whisper to a player via RabbitMQ chat.whispers exchange. Player must be online."""
+        import json as _json, base64 as _b64, time as _time, uuid as _uuid, datetime as _dt
+        if not self.k8s:
+            return False, "K8s service not available"
+        row = self.db.query("""
+            SELECT acc.funcom_id, ps.character_name, ps.online_status::text as online_status
+            FROM dune.player_state ps
+            JOIN dune.accounts acc ON acc.id = ps.account_id
+            WHERE ps.player_controller_id = %s
+            LIMIT 1
+        """, [player_controller_id], one=True)
+        if not row:
+            return False, "Player not found"
+        recipient_funcom_id = row.get('funcom_id') or ''
+        recipient_char_name = row.get('character_name') or ''
+        is_online = str(row.get('online_status', '')).lower() == 'online'
+        if not is_online:
+            return False, "Player must be online to receive a whisper"
+        if not recipient_funcom_id:
+            return False, "Recipient FuncomID not found"
+        ts = _dt.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        inner = _json.dumps({
+            "m_Id": str(_uuid.uuid4()),
+            "m_ChannelType": "ETextChatChannelType::Whispers",
+            "m_SubChannelId": recipient_funcom_id,
+            "m_bUseSpoofedUserName": False,
+            "m_SpoofedUserNameFrom": {"m_Id": "", "m_DisplayName": ""},
+            "m_FuncomIdFrom": sender_funcom_id,
+            "m_UserNameTo": recipient_char_name,
+            "m_Message": {
+                "m_UnlocalizedMessage": message,
+                "m_LocalizedMessage": {"m_TableId": "", "m_Key": "", "m_FormatArgs": []}
+            },
+            "m_TimeStamp": ts,
+            "m_OriginLocation": {"X": 0.0, "Y": 0.0, "Z": 0.0},
+            "m_HasSeenMessage": False,
+        }, separators=(',', ':'))
+        outer = _json.dumps({"Content": inner, "Type": "ECourierMessageType::TextChat"}, separators=(',', ':'))
+        body_b64 = _b64.b64encode(outer.encode('utf-8')).decode('ascii')
+        sender_id_b64 = _b64.b64encode(sender_funcom_id.encode('utf-8')).decode('ascii')
+        recipient_id_b64 = _b64.b64encode(recipient_funcom_id.encode('utf-8')).decode('ascii')
+        chat_msg_id = f"dashboard-chat-{int(_time.time() * 1000)}"
+        erlang = (
+            f'Body = base64:decode(<<"{body_b64}">>),\n'
+            f'XName = rabbit_misc:r(<<"/">>, exchange, <<"chat.whispers">>),\n'
+            f'X = rabbit_exchange:lookup_or_die(XName),\n'
+            f'MsgId = <<"{chat_msg_id}">>,\n'
+            f'Tag = binary_to_atom(<<"P_basic">>, utf8),\n'
+            f'SenderHex = base64:decode(<<"{sender_id_b64}">>),\n'
+            f'RecipientId = base64:decode(<<"{recipient_id_b64}">>),\n'
+            f'P = {{Tag, <<"Content">>, undefined, [], undefined, undefined, undefined, undefined, undefined, MsgId, undefined, <<"text_chat">>, SenderHex, <<"fls_backend">>, undefined}},\n'
+            f'Content = rabbit_basic:build_content(P, Body),\n'
+            f'{{ok, Msg}} = rabbit_basic:message(XName, RecipientId, Content),\n'
+            f'rabbit_queue_type:publish_at_most_once(X, Msg).\n'
+        )
+        ok, result = self._run_erlang_on_mq_game(erlang)
+        if ok:
+            audit_logger.info(f"WHISPER: from={sender_funcom_id} to={recipient_funcom_id} player_id={player_controller_id}")
+            return True, f"Whisper sent to {recipient_char_name}"
+        return False, result
 
     def add_item(self, inventory_id, template_id, stack_size=1, quality_level=0, stats_json=None):
         if inventory_id is None or template_id is None:
