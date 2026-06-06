@@ -281,7 +281,11 @@
 
 {% if inventories %}
 <div class="detail-section">
-    <h2>Inventory</h2>
+    <h2>Inventory
+        {% if not is_readonly and primary_inventories %}
+        <button onclick="openGivePackageModal()" class="btn-edit" style="margin-left:8px;">Give Package</button>
+        {% endif %}
+    </h2>
     {% if is_online %}
     <div style="font-size:12px;color:#e67e22;padding:0 16px 8px;">Player is online &mdash; edits will take effect after they log out and back in.</div>
     {% endif %}
@@ -722,6 +726,43 @@
         </div>
     </div>
 </div>
+
+<!-- Give Package Modal -->
+{% if not is_readonly and primary_inventories %}
+<div id="give-package-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('give-package-modal')">
+    <div class="modal" style="max-width:480px;">
+        <h3>Give Package</h3>
+        <div class="catalog-form-row">
+            <label>Package</label>
+            <select id="give-pkg-select" style="width:100%;">
+                <option value="">Loading packages&hellip;</option>
+            </select>
+        </div>
+        <div id="give-pkg-preview" style="display:none;margin:8px 0 12px;padding:8px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;">
+            <div style="font-size:12px;color:var(--text-light);" id="give-pkg-preview-text"></div>
+        </div>
+        <div class="catalog-form-row">
+            <label>Target Inventory</label>
+            <select id="give-inv-select" style="width:100%;">
+                {% for inv in primary_inventories %}
+                {% if inv.inventory_type == 0 %}
+                <option value="{{ inv.id }}">Main Inventory (ID {{ inv.id }})</option>
+                {% elif inv.inventory_type == 1 %}
+                <option value="{{ inv.id }}">Equipped (ID {{ inv.id }})</option>
+                {% else %}
+                <option value="{{ inv.id }}">{{ inv.inventory_type | inv_label }} (ID {{ inv.id }})</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        <div id="give-pkg-status" style="display:none;padding:8px 0;font-size:13px;"></div>
+        <div class="modal-actions">
+            <button type="button" onclick="submitGivePackage()" class="btn-save" id="give-pkg-btn">Give Package</button>
+            <button type="button" onclick="closeModal('give-package-modal')" class="btn-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Item Edit Modal -->
 <div id="item-edit-modal" class="modal-overlay item-edit-modal" style="display:none;" onclick="if(event.target===this)closeModal('item-edit-modal')">
@@ -1174,6 +1215,89 @@ async function syncCatalog() {
         link.textContent = orig;
     } finally {
         link.style.pointerEvents = '';
+    }
+}
+
+// ── Give Package ─────────────────────────────────────────────────────────────
+let _pkgCache = null;
+
+async function openGivePackageModal() {
+    const sel = document.getElementById('give-pkg-select');
+    const status = document.getElementById('give-pkg-status');
+    status.style.display = 'none';
+    document.getElementById('give-pkg-preview').style.display = 'none';
+    sel.innerHTML = '<option value="">Loading&hellip;</option>';
+    openModal('give-package-modal');
+    try {
+        const r = await fetch('/api/packages');
+        const j = await r.json();
+        if (!j.success || !j.packages.length) {
+            sel.innerHTML = '<option value="">No packages defined</option>';
+            return;
+        }
+        _pkgCache = {};
+        j.packages.forEach(p => { _pkgCache[p.id] = p; });
+        sel.innerHTML = '<option value="">— Select a package —</option>' +
+            j.packages.map(p => `<option value="${p.id}">${escHtml(p.name)} (${p.item_count} item${p.item_count !== 1 ? 's' : ''})</option>`).join('');
+        sel.onchange = onPkgSelect;
+    } catch(e) {
+        sel.innerHTML = '<option value="">Failed to load packages</option>';
+    }
+}
+
+function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function onPkgSelect() {
+    const pkgId = document.getElementById('give-pkg-select').value;
+    const preview = document.getElementById('give-pkg-preview');
+    if (!pkgId || !_pkgCache) { preview.style.display = 'none'; return; }
+    const pkg = _pkgCache[pkgId];
+    if (pkg) {
+        const txt = [pkg.description, `${pkg.item_count} item${pkg.item_count !== 1 ? 's' : ''}`].filter(Boolean).join(' · ');
+        document.getElementById('give-pkg-preview-text').textContent = txt;
+        preview.style.display = '';
+    }
+}
+
+async function submitGivePackage() {
+    const pkgId = document.getElementById('give-pkg-select').value;
+    const invId = document.getElementById('give-inv-select').value;
+    if (!pkgId) { alert('Please select a package.'); return; }
+    if (!invId) { alert('Please select a target inventory.'); return; }
+    const btn = document.getElementById('give-pkg-btn');
+    const status = document.getElementById('give-pkg-status');
+    btn.disabled = true;
+    btn.textContent = 'Giving…';
+    status.style.display = 'none';
+    try {
+        const data = new FormData();
+        data.append('package_id', pkgId);
+        data.append('inventory_id', invId);
+        const r = await csrfFetch('/api/give_package', { method: 'POST', body: data });
+        const j = await r.json();
+        status.style.display = '';
+        if (j.success) {
+            status.style.color = 'var(--success, #2ecc71)';
+            status.textContent = j.message;
+            btn.textContent = 'Done';
+            setTimeout(() => {
+                closeModal('give-package-modal');
+                location.reload();
+            }, 1500);
+        } else {
+            status.style.color = '#e74c3c';
+            status.textContent = j.message || j.error;
+            btn.disabled = false;
+            btn.textContent = 'Give Package';
+        }
+    } catch(e) {
+        status.style.display = '';
+        status.style.color = '#e74c3c';
+        status.textContent = 'Request failed.';
+        btn.disabled = false;
+        btn.textContent = 'Give Package';
     }
 }
 </script>

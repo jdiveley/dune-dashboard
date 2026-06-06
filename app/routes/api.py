@@ -8,6 +8,7 @@ import shlex
 import time
 from datetime import datetime
 from flask import Blueprint, request, jsonify
+from app.services import item_catalog as catalog_svc
 from flask_login import login_required
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -39,6 +40,7 @@ def register_api_routes(app, services, settings):
     admin_svc = services['admin']
     vehicle_svc = services['vehicle']
     audit_svc = services.get('audit')
+    package_svc = services.get('packages')
 
 # Get or create rate limiter - use existing one from factory if available
     if not hasattr(app, 'limiter'):
@@ -717,15 +719,91 @@ def register_api_routes(app, services, settings):
         try:
             inventory_id = request.form.get('inventory_id', type=int)
             template_id = request.form.get('template_id', '').strip()
+            item_type = request.form.get('item_type', 'resource').strip()
             stack_size = request.form.get('stack_size', type=int, default=1)
             quality_level = request.form.get('quality_level', type=int, default=0)
+            ammo_count = request.form.get('ammo_count', type=int)
 
             if not inventory_id or not template_id:
                 return jsonify({'success': False, 'error': 'Missing inventory_id or template_id'})
 
-            success, result = admin_svc.add_item(inventory_id, template_id, stack_size, quality_level)
+            stats_json = catalog_svc.get_stats_json(item_type, ammo_count)
+            success, result = admin_svc.add_item(inventory_id, template_id, stack_size, quality_level, stats_json)
             if success:
                 return jsonify({'success': True, 'message': 'Item added', 'item_id': result['item_id']})
+            return jsonify({'success': False, 'error': result})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    # Item Catalog
+    @app.route('/api/item_catalog', methods=['GET'])
+    @auth_req
+    def api_item_catalog_search():
+        try:
+            q = request.args.get('q', '').strip()
+            items = catalog_svc.search_catalog(q)
+            return jsonify({'success': True, 'items': items, 'count': len(items)})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/item_catalog/add', methods=['POST'])
+    @auth_req
+    def api_item_catalog_add():
+        try:
+            template_id = request.form.get('template_id', '').strip()
+            display_name = request.form.get('display_name', '').strip()
+            item_type = request.form.get('item_type', 'resource').strip()
+            category = request.form.get('category', '').strip()
+            default_stack = request.form.get('default_stack', type=int, default=1)
+
+            if not template_id or not display_name:
+                return jsonify({'success': False, 'error': 'Missing template_id or display_name'})
+
+            success, result = catalog_svc.add_to_catalog(template_id, display_name, item_type, category, default_stack)
+            if success:
+                return jsonify({'success': True, 'item': result})
+            return jsonify({'success': False, 'error': result})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/item_catalog/sync', methods=['POST'])
+    @auth_req
+    def api_item_catalog_sync():
+        try:
+            added, error = catalog_svc.fetch_and_parse_catalog()
+            if error:
+                return jsonify({'success': False, 'error': error})
+            return jsonify({'success': True, 'added': added, 'message': f'{added} new items added from catalog URL'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/item_catalog/update', methods=['POST'])
+    @auth_req
+    def api_item_catalog_update():
+        try:
+            template_id = request.form.get('template_id', '').strip()
+            display_name = request.form.get('display_name', '').strip() or None
+            item_type = request.form.get('item_type', '').strip() or None
+            default_stack = request.form.get('default_stack', type=int)
+            if not template_id:
+                return jsonify({'success': False, 'error': 'Missing template_id'})
+            success, result = catalog_svc.update_item(template_id, display_name, item_type, default_stack)
+            if success:
+                return jsonify({'success': True, 'item': result})
+            return jsonify({'success': False, 'error': result})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/item_catalog/delete', methods=['POST'])
+    @auth_req
+    def api_item_catalog_delete():
+        try:
+            template_id = request.form.get('template_id', '').strip()
+            if not template_id:
+                return jsonify({'success': False, 'error': 'Missing template_id'})
+            success, result = catalog_svc.remove_item(template_id)
+            if success:
+                return jsonify({'success': True})
             return jsonify({'success': False, 'error': result})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
@@ -1628,3 +1706,137 @@ def register_api_routes(app, services, settings):
         except Exception as e:
             logger.error(f"Failed to toggle debug: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
+
+    # Item packages
+    @app.route('/api/packages', methods=['GET'])
+    @auth_req
+    def api_list_packages():
+        try:
+            packages = package_svc.list_packages() if package_svc else []
+            return jsonify({'success': True, 'packages': [dict(p) for p in packages]})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/packages', methods=['POST'])
+    @auth_req
+    def api_create_package():
+        try:
+            name = request.form.get('name', '').strip()
+            description = request.form.get('description', '').strip()
+            if not name:
+                return jsonify({'success': False, 'error': 'Name is required'})
+            success, result = package_svc.create_package(name, description)
+            if success:
+                return jsonify({'success': True, 'package_id': result})
+            return jsonify({'success': False, 'error': result})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/packages/<int:package_id>', methods=['POST'])
+    @auth_req
+    def api_update_package(package_id):
+        try:
+            name = request.form.get('name', '').strip()
+            description = request.form.get('description', '').strip()
+            if not name:
+                return jsonify({'success': False, 'error': 'Name is required'})
+            success, result = package_svc.update_package(package_id, name, description)
+            if success:
+                return jsonify({'success': True})
+            return jsonify({'success': False, 'error': result})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/packages/<int:package_id>', methods=['DELETE'])
+    @auth_req
+    def api_delete_package(package_id):
+        try:
+            success, result = package_svc.delete_package(package_id)
+            if success:
+                return jsonify({'success': True})
+            return jsonify({'success': False, 'error': result})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/packages/<int:package_id>/items', methods=['GET'])
+    @auth_req
+    def api_get_package_items(package_id):
+        try:
+            pkg, items = package_svc.get_package(package_id)
+            if not pkg:
+                return jsonify({'success': False, 'error': 'Package not found'})
+            return jsonify({'success': True, 'items': [dict(i) for i in items]})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/packages/<int:package_id>/items', methods=['POST'])
+    @auth_req
+    def api_add_package_item(package_id):
+        try:
+            template_id = request.form.get('template_id', '').strip()
+            display_name = request.form.get('display_name', '').strip()
+            item_type = request.form.get('item_type', 'resource').strip()
+            stack_size = request.form.get('stack_size', type=int, default=1)
+            quality_level = request.form.get('quality_level', type=int, default=0)
+            if not template_id:
+                return jsonify({'success': False, 'error': 'template_id is required'})
+            success, result = package_svc.add_item(package_id, template_id, display_name, item_type, stack_size, quality_level)
+            if success:
+                return jsonify({'success': True, 'item_id': result})
+            return jsonify({'success': False, 'error': result})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/packages/<int:package_id>/items/<int:item_id>', methods=['DELETE'])
+    @auth_req
+    def api_remove_package_item(package_id, item_id):
+        try:
+            success, result = package_svc.remove_item(item_id)
+            if success:
+                return jsonify({'success': True})
+            return jsonify({'success': False, 'error': result})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/give_package', methods=['POST'])
+    @auth_req
+    def api_give_package():
+        try:
+            inventory_id = request.form.get('inventory_id', type=int)
+            package_id = request.form.get('package_id', type=int)
+            if not inventory_id or not package_id:
+                return jsonify({'success': False, 'error': 'Missing inventory_id or package_id'})
+            pkg, items = package_svc.get_package(package_id)
+            if not pkg:
+                return jsonify({'success': False, 'error': 'Package not found'})
+            if not items:
+                return jsonify({'success': False, 'error': 'Package has no items'})
+            added = 0
+            errors = []
+            for item in items:
+                stats_json = catalog_svc.get_stats_json(item['item_type'], None)
+                success, result = admin_svc.add_item(
+                    inventory_id, item['template_id'],
+                    item['stack_size'], item['quality_level'],
+                    stats_json
+                )
+                if success:
+                    added += 1
+                else:
+                    errors.append(f"{item.get('display_name') or item['template_id']}: {result}")
+            if errors:
+                return jsonify({
+                    'success': added > 0,
+                    'added': added,
+                    'total': len(items),
+                    'errors': errors,
+                    'message': f'Added {added}/{len(items)} items ({len(errors)} failed)',
+                })
+            return jsonify({
+                'success': True,
+                'added': added,
+                'total': len(items),
+                'message': f'Added {added} item(s) from "{pkg["name"]}"',
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})

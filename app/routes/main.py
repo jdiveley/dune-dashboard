@@ -496,6 +496,15 @@ def register_routes(app, services, settings):
             logger.exception("Error in server_status route")
             return render_template('server.html', db_error=f"{type(e).__name__}: {e}")
 
+    @app.route('/catalog')
+    @login_required
+    def catalog_page():
+        from app.services import item_catalog as cat_svc
+        items = cat_svc.load_catalog()
+        return render_template('catalog.html', items=items,
+                               item_types=cat_svc.ITEM_TYPES,
+                               item_type_labels=cat_svc.ITEM_TYPE_LABELS)
+
     # Map - shows locations of players, vehicles, buildings
     @app.route('/map')
     @login_required
@@ -724,3 +733,16 @@ def register_routes(app, services, settings):
                 map_config=map_config,
                 default_map=default_map,
                 db_error=f"{type(e).__name__}: {e}")
+
+    # Packages
+    @app.route('/packages')
+    @login_required
+    def packages():
+        package_svc = services.get('packages')
+        packages_list = package_svc.list_packages() if package_svc else []
+        from app.services.item_catalog import ITEM_TYPES, ITEM_TYPE_LABELS
+        return render_template('packages.html',
+            packages=packages_list,
+            item_types=ITEM_TYPES,
+            item_type_labels=ITEM_TYPE_LABELS,
+        )

@@ -28,6 +28,7 @@ from app.services.updater import UpdateService
 from app.services.director import DirectorService
 from app.services.scheduled_restart import ScheduledRestartService
 from app.services.backup import BackupService
+from app.services.packages import PackageService
 from app.utils.cache import MultiCache
 from app.routes.main import register_routes
 from app.routes.api import register_api_routes
@@ -259,6 +260,8 @@ def create_app(settings_path=None):
         db_pod_port=db_pod_port,
     )
 
+    package_svc = PackageService(db_service)
+
     services = {
         'db': db_service,
         'ssh': ssh_service,
@@ -272,6 +275,7 @@ def create_app(settings_path=None):
         'director': director_svc,
         'scheduler': scheduler_svc,
         'backup': backup_svc,
+        'packages': package_svc,
     }
     logging.debug(f"All services registered: {list(services.keys())}")
 

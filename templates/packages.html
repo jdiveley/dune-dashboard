@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+{% block title %}Item Packages - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Item Packages</h1>
+    <p>Pre-configured item bundles. Give a package to a player from their profile page.</p>
+</div>
+
+{% if not is_readonly %}
+<div style="margin-bottom:16px;">
+    <button onclick="openCreateModal()" class="btn-save">+ New Package</button>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="table-wrap">
+        <table id="packages-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th style="text-align:center;">Items</th>
+                    {% if not is_readonly %}<th>Actions</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for pkg in packages %}
+                <tr>
+                    <td><strong>{{ pkg.name }}</strong></td>
+                    <td style="color:var(--text-light);">{{ pkg.description or '—' }}</td>
+                    <td style="text-align:center;">{{ pkg.item_count }}</td>
+                    {% if not is_readonly %}
+                    <td>
+                        <button class="btn-edit" style="font-size:11px;padding:2px 8px;"
+                            onclick="openManageModal({{ pkg.id }}, '{{ pkg.name | escapejs }}', '{{ pkg.description | escapejs }}')">Manage</button>
+                        <button class="btn-danger" style="font-size:11px;padding:2px 8px;margin-left:4px;"
+                            onclick="deletePackage({{ pkg.id }}, '{{ pkg.name | escapejs }}')">Delete</button>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="empty">No packages yet. Create one to get started.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if not is_readonly %}
+<!-- Create Package Modal -->
+<div id="create-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeCreateModal()">
+    <div class="modal" style="max-width:480px;">
+        <h3>New Package</h3>
+        <div class="catalog-form-row">
+            <label>Name</label>
+            <input type="text" id="create-name" placeholder="e.g. Welcome Package" maxlength="100">
+        </div>
+        <div class="catalog-form-row">
+            <label>Description <span style="color:var(--text-muted);font-weight:normal;">(optional)</span></label>
+            <input type="text" id="create-desc" placeholder="e.g. Starter gear for new players" maxlength="255">
+        </div>
+        <div class="modal-actions">
+            <button type="button" onclick="submitCreate()" class="btn-save">Create</button>
+            <button type="button" onclick="closeCreateModal()" class="btn-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Manage Package Modal -->
+<div id="manage-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeManageModal()">
+    <div class="modal modal-wide" style="max-width:700px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+            <h3 style="margin:0;flex:1;" id="manage-title">Package</h3>
+            <button onclick="openRenameModal()" class="btn-edit" style="font-size:11px;padding:2px 8px;">Rename</button>
+        </div>
+        <p id="manage-desc" style="font-size:13px;color:var(--text-light);margin:0 0 16px;"></p>
+
+        <h4 style="margin:0 0 8px;">Items in this package</h4>
+        <div class="table-wrap" style="margin-bottom:16px;">
+            <table id="manage-items-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Template ID</th>
+                        <th>Type</th>
+                        <th style="text-align:center;">Stack</th>
+                        <th style="text-align:center;">Quality</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="manage-items-body">
+                    <tr><td colspan="6" class="empty">No items yet.</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4 style="margin:0 0 8px;">Add item</h4>
+        <!-- Search state -->
+        <div id="pkg-search-state">
+            <input type="text" id="pkg-catalog-input" class="catalog-search-input"
+                   placeholder="Search by item name or template ID..."
+                   oninput="pkgCatalogSearch(this.value)" autocomplete="off">
+            <div id="pkg-catalog-results" class="catalog-results">
+                <div class="catalog-no-results">Type to search the item catalog&hellip;</div>
+            </div>
+        </div>
+
+        <!-- Selected item state -->
+        <div id="pkg-selected-state" style="display:none;">
+            <div class="catalog-selected-card">
+                <div class="catalog-selected-name" id="pkg-selected-name"></div>
+                <div class="catalog-selected-meta" id="pkg-selected-meta"></div>
+            </div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                <div class="catalog-form-row" style="flex:1;min-width:120px;">
+                    <label>Stack Size</label>
+                    <input type="number" id="pkg-stack" value="1" min="1">
+                </div>
+                <div class="catalog-form-row" style="flex:1;min-width:120px;">
+                    <label>Quality (0–4)</label>
+                    <input type="number" id="pkg-quality" value="0" min="0" max="4">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" onclick="submitAddToPkg()" class="btn-save">Add to Package</button>
+                <button type="button" onclick="resetPkgSearch()" class="btn-cancel">Back</button>
+            </div>
+        </div>
+
+        <div class="modal-actions" style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px;">
+            <button type="button" onclick="closeManageModal()" class="btn-cancel">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Rename Modal -->
+<div id="rename-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeRenameModal()">
+    <div class="modal" style="max-width:480px;">
+        <h3>Rename Package</h3>
+        <div class="catalog-form-row">
+            <label>Name</label>
+            <input type="text" id="rename-name" maxlength="100">
+        </div>
+        <div class="catalog-form-row">
+            <label>Description</label>
+            <input type="text" id="rename-desc" maxlength="255">
+        </div>
+        <div class="modal-actions">
+            <button type="button" onclick="submitRename()" class="btn-save">Save</button>
+            <button type="button" onclick="closeRenameModal()" class="btn-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const isReadonly = {{ 'true' if is_readonly else 'false' }};
+let currentPkgId = null;
+let pkgSelectedItem = null;
+
+// ── Create ──────────────────────────────────────────────────────────────────
+function openCreateModal() {
+    document.getElementById('create-name').value = '';
+    document.getElementById('create-desc').value = '';
+    document.getElementById('create-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('create-name').focus(), 50);
+}
+function closeCreateModal() {
+    document.getElementById('create-modal').style.display = 'none';
+}
+async function submitCreate() {
+    const name = document.getElementById('create-name').value.trim();
+    if (!name) { alert('Name is required.'); return; }
+    const data = new FormData();
+    data.append('name', name);
+    data.append('description', document.getElementById('create-desc').value.trim());
+    const r = await csrfFetch('/api/packages', { method: 'POST', body: data });
+    const j = await r.json();
+    if (j.success) { location.reload(); } else { alert('Error: ' + j.error); }
+}
+
+// ── Delete ───────────────────────────────────────────────────────────────────
+async function deletePackage(pkgId, name) {
+    if (!confirm(`Delete package "${name}" and all its items?`)) return;
+    const r = await csrfFetch(`/api/packages/${pkgId}`, { method: 'DELETE' });
+    const j = await r.json();
+    if (j.success) { location.reload(); } else { alert('Error: ' + j.error); }
+}
+
+// ── Manage ───────────────────────────────────────────────────────────────────
+async function openManageModal(pkgId, name, desc) {
+    currentPkgId = pkgId;
+    document.getElementById('manage-title').textContent = name;
+    document.getElementById('manage-desc').textContent = desc || '';
+    resetPkgSearch();
+    await loadPkgItems();
+    document.getElementById('manage-modal').style.display = 'flex';
+}
+function closeManageModal() {
+    document.getElementById('manage-modal').style.display = 'none';
+    currentPkgId = null;
+}
+
+async function loadPkgItems() {
+    const r = await fetch(`/api/packages`);
+    const j = await r.json();
+    if (!j.success) return;
+    const pkg = j.packages.find(p => p.id === currentPkgId);
+    // Re-fetch full package with items
+    const r2 = await fetch(`/api/packages/${currentPkgId}/items`);
+    const j2 = await r2.json();
+    if (!j2.success) return;
+    renderPkgItems(j2.items);
+}
+
+async function refreshPkgItems() {
+    const r = await csrfFetch(`/api/packages/${currentPkgId}/items`);
+    const j = await r.json();
+    if (j.success) renderPkgItems(j.items);
+}
+
+function renderPkgItems(items) {
+    const tbody = document.getElementById('manage-items-body');
+    if (!items || items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">No items yet.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = items.map(it => `
+        <tr>
+            <td>${escHtml(it.display_name || it.template_id)}</td>
+            <td style="font-family:monospace;font-size:11px;">${escHtml(it.template_id)}</td>
+            <td><span class="badge cat-type-badge cat-type-${it.item_type}">${escHtml(it.item_type)}</span></td>
+            <td style="text-align:center;">${it.stack_size}</td>
+            <td style="text-align:center;">${it.quality_level}</td>
+            <td><button class="btn-danger" style="font-size:11px;padding:1px 6px;"
+                onclick="removePkgItem(${it.id}, '${escHtml(it.display_name || it.template_id).replace(/'/g,'\\x27')}')">Remove</button></td>
+        </tr>
+    `).join('');
+}
+
+async function removePkgItem(itemId, name) {
+    if (!confirm(`Remove "${name}" from this package?`)) return;
+    const r = await csrfFetch(`/api/packages/${currentPkgId}/items/${itemId}`, { method: 'DELETE' });
+    const j = await r.json();
+    if (j.success) { await refreshPkgItems(); } else { alert('Error: ' + j.error); }
+}
+
+// ── Rename ────────────────────────────────────────────────────────────────────
+function openRenameModal() {
+    document.getElementById('rename-name').value = document.getElementById('manage-title').textContent;
+    document.getElementById('rename-desc').value = document.getElementById('manage-desc').textContent;
+    document.getElementById('rename-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('rename-name').focus(), 50);
+}
+function closeRenameModal() {
+    document.getElementById('rename-modal').style.display = 'none';
+}
+async function submitRename() {
+    const name = document.getElementById('rename-name').value.trim();
+    if (!name) { alert('Name is required.'); return; }
+    const data = new FormData();
+    data.append('name', name);
+    data.append('description', document.getElementById('rename-desc').value.trim());
+    const r = await csrfFetch(`/api/packages/${currentPkgId}`, { method: 'POST', body: data });
+    const j = await r.json();
+    if (j.success) {
+        document.getElementById('manage-title').textContent = name;
+        document.getElementById('manage-desc').textContent = document.getElementById('rename-desc').value.trim();
+        closeRenameModal();
+        // Update table row in background
+        const rows = document.querySelectorAll('#packages-table tbody tr');
+        rows.forEach(row => {
+            const btn = row.querySelector(`button[onclick*="openManageModal(${currentPkgId}"]`);
+            if (btn) row.querySelector('td:first-child strong').textContent = name;
+        });
+    } else {
+        alert('Error: ' + j.error);
+    }
+}
+
+// ── Catalog search (within manage modal) ────────────────────────────────────
+let pkgSearchTimer = null;
+function pkgCatalogSearch(q) {
+    clearTimeout(pkgSearchTimer);
+    const results = document.getElementById('pkg-catalog-results');
+    if (!q.trim()) {
+        results.innerHTML = '<div class="catalog-no-results">Type to search the item catalog&hellip;</div>';
+        return;
+    }
+    results.innerHTML = '<div class="catalog-no-results">Searching&hellip;</div>';
+    pkgSearchTimer = setTimeout(async () => {
+        try {
+            const r = await fetch(`/api/item_catalog?q=${encodeURIComponent(q)}`);
+            const j = await r.json();
+            if (!j.success || !j.items.length) {
+                results.innerHTML = '<div class="catalog-no-results">No results.</div>';
+                return;
+            }
+            results.innerHTML = j.items.slice(0, 30).map(it => `
+                <div class="catalog-result-row" onclick="pkgSelectItem(${JSON.stringify(it)})">
+                    <span class="cat-result-name">${escHtml(it.display_name)}</span>
+                    <span class="cat-result-type badge cat-type-badge cat-type-${it.item_type}">${escHtml(it.item_type)}</span>
+                    <span class="cat-result-id">${escHtml(it.template_id)}</span>
+                </div>
+            `).join('');
+        } catch(e) {
+            results.innerHTML = '<div class="catalog-no-results">Search failed.</div>';
+        }
+    }, 250);
+}
+
+function pkgSelectItem(item) {
+    pkgSelectedItem = item;
+    document.getElementById('pkg-selected-name').textContent = item.display_name;
+    document.getElementById('pkg-selected-meta').textContent = `${item.item_type} · ${item.template_id}`;
+    document.getElementById('pkg-stack').value = item.default_stack || 1;
+    document.getElementById('pkg-quality').value = 0;
+    document.getElementById('pkg-search-state').style.display = 'none';
+    document.getElementById('pkg-selected-state').style.display = '';
+}
+
+function resetPkgSearch() {
+    pkgSelectedItem = null;
+    document.getElementById('pkg-catalog-input').value = '';
+    document.getElementById('pkg-catalog-results').innerHTML = '<div class="catalog-no-results">Type to search the item catalog&hellip;</div>';
+    document.getElementById('pkg-search-state').style.display = '';
+    document.getElementById('pkg-selected-state').style.display = 'none';
+}
+
+async function submitAddToPkg() {
+    if (!pkgSelectedItem) return;
+    const data = new FormData();
+    data.append('template_id', pkgSelectedItem.template_id);
+    data.append('display_name', pkgSelectedItem.display_name);
+    data.append('item_type', pkgSelectedItem.item_type);
+    data.append('stack_size', document.getElementById('pkg-stack').value);
+    data.append('quality_level', document.getElementById('pkg-quality').value);
+    const r = await csrfFetch(`/api/packages/${currentPkgId}/items`, { method: 'POST', body: data });
+    const j = await r.json();
+    if (j.success) {
+        resetPkgSearch();
+        await refreshPkgItems();
+    } else {
+        alert('Error: ' + j.error);
+    }
+}
+
+function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Load items for manage modal via dedicated endpoint ────────────────────────
+// Override the fetch above to use the correct items endpoint
+async function openManageModal(pkgId, name, desc) {
+    currentPkgId = pkgId;
+    document.getElementById('manage-title').textContent = name;
+    document.getElementById('manage-desc').textContent = desc || '';
+    resetPkgSearch();
+    document.getElementById('manage-items-body').innerHTML = '<tr><td colspan="6" class="empty">Loading&hellip;</td></tr>';
+    document.getElementById('manage-modal').style.display = 'flex';
+    await refreshPkgItems();
+}
+
+async function refreshPkgItems() {
+    const r = await fetch(`/api/packages/${currentPkgId}/items`);
+    const j = await r.json();
+    if (j.success) renderPkgItems(j.items);
+}
+</script>
+{% endblock %}

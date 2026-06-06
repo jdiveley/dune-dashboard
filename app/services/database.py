@@ -204,6 +204,25 @@ class DatabaseService:
                 CREATE INDEX IF NOT EXISTS disk_io_snapshots_captured_at_idx
                     ON {schema}.disk_io_snapshots(captured_at)
             """)
+            cur.execute(f"""
+                CREATE TABLE IF NOT EXISTS {schema}.item_packages (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT DEFAULT '',
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                )
+            """)
+            cur.execute(f"""
+                CREATE TABLE IF NOT EXISTS {schema}.item_package_items (
+                    id SERIAL PRIMARY KEY,
+                    package_id INT NOT NULL REFERENCES {schema}.item_packages(id) ON DELETE CASCADE,
+                    template_id TEXT NOT NULL,
+                    display_name TEXT DEFAULT '',
+                    item_type TEXT DEFAULT 'resource',
+                    stack_size INT DEFAULT 1,
+                    quality_level INT DEFAULT 0
+                )
+            """)
             conn.commit()
             logger.info(f"Dashboard tables ensured in schema '{schema}' (player_ips, bans, player_actions, disk_io_snapshots)")
         except Exception as e:
