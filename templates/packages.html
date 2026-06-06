@@ -284,6 +284,8 @@ async function submitRename() {
 
 // ── Catalog search (within manage modal) ────────────────────────────────────
 let pkgSearchTimer = null;
+let _pkgSearchResults = [];
+
 function pkgCatalogSearch(q) {
     clearTimeout(pkgSearchTimer);
     const results = document.getElementById('pkg-catalog-results');
@@ -300,11 +302,12 @@ function pkgCatalogSearch(q) {
                 results.innerHTML = '<div class="catalog-no-results">No results.</div>';
                 return;
             }
-            results.innerHTML = j.items.slice(0, 30).map(it => `
-                <div class="catalog-result-row" onclick="pkgSelectItem(${JSON.stringify(it)})">
-                    <span class="cat-result-name">${escHtml(it.display_name)}</span>
-                    <span class="cat-result-type badge cat-type-badge cat-type-${it.item_type}">${escHtml(it.item_type)}</span>
-                    <span class="cat-result-id">${escHtml(it.template_id)}</span>
+            _pkgSearchResults = j.items.slice(0, 30);
+            results.innerHTML = _pkgSearchResults.map((it, i) => `
+                <div class="catalog-result-item" onclick="pkgSelectItem(${i})">
+                    <span class="catalog-result-name">${escHtml(it.display_name)}</span>
+                    <span class="catalog-result-id">${escHtml(it.template_id)}</span>
+                    <span class="catalog-result-type">${escHtml(it.item_type)}</span>
                 </div>
             `).join('');
         } catch(e) {
@@ -313,8 +316,9 @@ function pkgCatalogSearch(q) {
     }, 250);
 }
 
-function pkgSelectItem(item) {
-    pkgSelectedItem = item;
+function pkgSelectItem(idx) {
+    pkgSelectedItem = _pkgSearchResults[idx];
+    const item = pkgSelectedItem;
     document.getElementById('pkg-selected-name').textContent = item.display_name;
     document.getElementById('pkg-selected-meta').textContent = `${item.item_type} · ${item.template_id}`;
     document.getElementById('pkg-stack').value = item.default_stack || 1;
