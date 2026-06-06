@@ -1100,6 +1100,108 @@ td a:hover { text-decoration: underline; }
     justify-content: flex-end;
 }
 
+/* Item Catalog Search Modal */
+.modal-wide { max-width: 540px; }
+
+.catalog-search-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+    background: var(--bg);
+    color: var(--text);
+    box-sizing: border-box;
+    margin-bottom: 8px;
+}
+.catalog-search-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+.catalog-results {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 10px;
+    background: var(--card-bg);
+}
+.catalog-result-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.catalog-result-item:last-child { border-bottom: none; }
+.catalog-result-item:hover { background: var(--bg); }
+.catalog-result-name { font-weight: 600; font-size: 13px; color: var(--text); }
+.catalog-result-id { font-size: 11px; color: var(--text-light); font-family: monospace; }
+.catalog-result-type { font-size: 11px; color: var(--text-muted); }
+.catalog-no-results { padding: 14px 12px; color: var(--text-light); font-size: 13px; text-align: center; }
+.catalog-selected-card {
+    background: var(--bg);
+    border: 1px solid var(--primary);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+}
+.catalog-selected-name { font-weight: 600; font-size: 14px; color: var(--text); }
+.catalog-selected-meta { font-size: 12px; color: var(--text-light); margin-top: 3px; font-family: monospace; }
+.catalog-add-new-link {
+    font-size: 13px;
+    color: var(--primary);
+    cursor: pointer;
+    text-decoration: underline;
+    margin-bottom: 4px;
+    display: inline-block;
+}
+.catalog-add-new-link:hover { color: var(--primary-dark); }
+.catalog-sync-link {
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    text-decoration: underline;
+    margin-left: 12px;
+}
+.catalog-sync-link:hover { color: var(--text-light); }
+.catalog-form-row {
+    margin-bottom: 12px;
+}
+.catalog-form-row label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-light);
+    margin-bottom: 4px;
+}
+.catalog-form-row input,
+.catalog-form-row select {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+    background: var(--bg);
+    color: var(--text);
+    box-sizing: border-box;
+}
+.catalog-form-row input:focus,
+.catalog-form-row select:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+.catalog-form-row input[type="number"] { width: 100px; }
+.catalog-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+
+/* Catalog type badges */
+.cat-type-badge { font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; display: inline-block; }
+.cat-type-resource  { background: #d4a853; color: #fff; }
+.cat-type-tool      { background: #5d8a5e; color: #fff; }
+.cat-type-weapon    { background: #b94a4a; color: #fff; }
+.cat-type-armor     { background: #4a6ab9; color: #fff; }
+.cat-type-stillsuit { background: #7a5ab9; color: #fff; }
+
 /* Chat Logs */
 .chat-msg {
     padding: 8px 12px;

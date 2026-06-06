@@ -26,6 +26,10 @@ ADMIN_ENDPOINTS = [
     ("post", "/api/maintenance/create_indexes"),
     ("delete", "/api/vehicles/1"),
     ("delete", "/api/buildings/1"),
+    ("post", "/api/add_item"),
+    ("get", "/api/item_catalog"),
+    ("post", "/api/item_catalog/add"),
+    ("post", "/api/item_catalog/sync"),
 ]
 
 
