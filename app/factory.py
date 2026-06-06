@@ -526,11 +526,11 @@ def create_app(settings_path=None):
                                 pass
                         last_ssh_ok = False
 
-                        # Reset database pool if multiple consecutive failures
-                        if not db_ok and db_svc and consecutive_failures >= 3:
+                        # Reset database pool on first failure so stale connections are discarded immediately
+                        if not db_ok and db_svc:
                             try:
                                 db_svc.close_all()
-                                logging.info("Connection monitor: Database pool reset due to connection issues")
+                                logging.info("Connection monitor: Database pool reset due to connection issue")
                             except Exception:
                                 pass
 

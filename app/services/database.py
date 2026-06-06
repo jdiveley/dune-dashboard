@@ -1,6 +1,7 @@
 """Database service - connection pool and query helpers"""
 
 import logging
+import threading
 import time
 import psycopg2
 import psycopg2.extras
@@ -16,27 +17,29 @@ class DatabaseService:
         self.max_conn = max_conn
         self.dashboard_schema = dashboard_schema
         self.pool = None
+        self._pool_lock = threading.Lock()
 
     def init_pool(self):
-        if self.pool is None:
-            # Retry up to 10 times with 2s delays (20s total) to handle startup race conditions
-            for attempt in range(10):
-                try:
-                    self.pool = psycopg2.pool.ThreadedConnectionPool(
-                        minconn=self.min_conn,
-                        maxconn=self.max_conn,
-                        **self.db_config
-                    )
-                    logger.info("Database connection pool initialized")
-                    return self.pool
-                except Exception as e:
-                    if attempt < 9:
-                        logger.warning(f"DB pool attempt {attempt + 1}/10 failed, retrying in 2s: {e}")
-                        time.sleep(2)
-                    else:
-                        logger.error(f"Failed to initialize database pool after 10 attempts: {e}")
-                        self.pool = None
-        return self.pool
+        with self._pool_lock:
+            if self.pool is None:
+                # Retry up to 10 times with 2s delays (20s total) to handle startup race conditions
+                for attempt in range(10):
+                    try:
+                        self.pool = psycopg2.pool.ThreadedConnectionPool(
+                            minconn=self.min_conn,
+                            maxconn=self.max_conn,
+                            **self.db_config
+                        )
+                        logger.info("Database connection pool initialized")
+                        return self.pool
+                    except Exception as e:
+                        if attempt < 9:
+                            logger.warning(f"DB pool attempt {attempt + 1}/10 failed, retrying in 2s: {e}")
+                            time.sleep(2)
+                        else:
+                            logger.error(f"Failed to initialize database pool after 10 attempts: {e}")
+                            self.pool = None
+            return self.pool
 
     def get_connection(self):
         try:
@@ -48,10 +51,10 @@ class DatabaseService:
             logger.error(f"Failed to get database connection: {e}")
             return None
 
-    def return_connection(self, conn):
-        if conn and self.pool and hasattr(conn, 'poll'):
+    def return_connection(self, conn, bad=False):
+        if conn and self.pool:
             try:
-                self.pool.putconn(conn)
+                self.pool.putconn(conn, close=bad)
             except Exception:
                 try:
                     conn.close()
@@ -59,17 +62,19 @@ class DatabaseService:
                     pass
 
     def close_all(self):
-        if self.pool:
-            try:
-                self.pool.closeall()
-            except Exception as e:
-                logger.error(f"Error closing pool: {e}")
-            self.pool = None
+        with self._pool_lock:
+            if self.pool:
+                try:
+                    self.pool.closeall()
+                except Exception as e:
+                    logger.error(f"Error closing pool: {e}")
+                self.pool = None
 
     def query(self, sql, params=None, one=False):
         conn = self.get_connection()
         if not conn:
             return {} if one else []
+        bad = False
         cur = None
         try:
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -82,16 +87,18 @@ class DatabaseService:
             return rows
         except Exception as e:
             logger.error(f"Database query error: {e}")
+            bad = True
             raise
         finally:
             if cur:
                 cur.close()
-            self.return_connection(conn)
+            self.return_connection(conn, bad=bad)
 
     def execute(self, sql, params=None, commit=True):
         conn = self.get_connection()
         if not conn:
             return False
+        bad = False
         cur = None
         try:
             cur = conn.cursor()
@@ -101,13 +108,14 @@ class DatabaseService:
             return True
         except Exception as e:
             logger.error(f"Database execute error: {e}")
+            bad = True
             if conn:
                 conn.rollback()
             return False
         finally:
             if cur:
                 cur.close()
-            self.return_connection(conn)
+            self.return_connection(conn, bad=bad)
 
     def execute_with_conn(self, conn, sql, params=None):
         cur = conn.cursor()
@@ -119,6 +127,8 @@ class DatabaseService:
             raise
 
     def check_health(self):
+        conn = None
+        bad = False
         try:
             conn = self.get_connection()
             if not conn:
@@ -128,14 +138,17 @@ class DatabaseService:
             cur.execute('SELECT 1')
             cur.fetchone()
             cur.close()
-            self.return_connection(conn)
             db_host = self.db_config.get('host', 'unknown')
             db_port = self.db_config.get('port', 'unknown')
             logger.debug(f"Database health check OK (host={db_host}, port={db_port})")
             return True
         except Exception as e:
             logger.warning(f"Database health check FAILED: {e}")
+            bad = True
             return False
+        finally:
+            if conn:
+                self.return_connection(conn, bad=bad)
 
     def ensure_tables(self):
         conn = self.get_connection()
