@@ -83,4 +83,6 @@ NAV_PAGES = [
     ('/map', 'Map'),
     ('/catalog', 'Catalog'),
     ('/packages', 'Packages'),
+    ('/storage', 'Storage'),
+    ('/market', 'Market'),
 ]

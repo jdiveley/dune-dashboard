@@ -39,6 +39,7 @@ def register_api_routes(app, services, settings):
     chat_svc = services['chat']
     admin_svc = services['admin']
     vehicle_svc = services['vehicle']
+    player_svc = services.get('player')
     audit_svc = services.get('audit')
     package_svc = services.get('packages')
 
@@ -1876,4 +1877,334 @@ def register_api_routes(app, services, settings):
             return jsonify({'success': False, 'error': msg})
         except Exception as e:
             logger.error(f"whisper_player error: {e}")
+            return jsonify({'success': False, 'error': str(e)})
+
+    # ── Player data reads ─────────────────────────────────────────────────────
+
+    @app.route('/api/player/<int:player_id>/stats')
+    @auth_req
+    def api_player_stats(player_id):
+        try:
+            row = db.query("""
+                SELECT ps.account_id, ps.player_pawn_id, ps.player_controller_id
+                FROM dune.player_state ps WHERE ps.player_controller_id = %s LIMIT 1
+            """, [player_id], one=True)
+            if not row:
+                return jsonify({'success': False, 'error': 'Player not found'})
+            stats = player_svc.get_player_extended_stats(row['account_id'], row['player_pawn_id'])
+            return jsonify({'success': True, 'stats': stats})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/dungeon_history')
+    @auth_req
+    def api_player_dungeon_history(player_id):
+        try:
+            row = db.query("SELECT player_pawn_id FROM dune.player_state WHERE player_controller_id = %s LIMIT 1", [player_id], one=True)
+            history = player_svc.get_player_dungeon_history(row['player_pawn_id'] if row else None)
+            return jsonify({'success': True, 'history': [dict(h) for h in history]})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/currency_history')
+    @auth_req
+    def api_player_currency_history(player_id):
+        try:
+            row = db.query("SELECT account_id FROM dune.player_state WHERE player_controller_id = %s LIMIT 1", [player_id], one=True)
+            history = player_svc.get_player_currency_history(row['account_id'] if row else None)
+            return jsonify({'success': True, 'history': [dict(h) for h in history]})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/journey')
+    @auth_req
+    def api_player_journey(player_id):
+        try:
+            row = db.query("SELECT account_id FROM dune.player_state WHERE player_controller_id = %s LIMIT 1", [player_id], one=True)
+            nodes = player_svc.get_player_journey_nodes(row['account_id'] if row else None)
+            return jsonify({'success': True, 'nodes': [dict(n) for n in nodes]})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/storage')
+    @auth_req
+    def api_storage():
+        try:
+            containers = player_svc.get_storage_containers()
+            return jsonify({'success': True, 'containers': [dict(c) for c in containers]})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/storage/<int:actor_id>/items')
+    @auth_req
+    def api_storage_items(actor_id):
+        try:
+            items = player_svc.get_container_items(actor_id)
+            return jsonify({'success': True, 'items': [dict(i) for i in items]})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/market/listings')
+    @auth_req
+    def api_market_listings():
+        try:
+            listings = player_svc.get_market_listings()
+            return jsonify({'success': True, 'listings': [dict(l) for l in listings]})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/market/sales')
+    @auth_req
+    def api_market_sales():
+        try:
+            sales = player_svc.get_market_sales()
+            return jsonify({'success': True, 'sales': [dict(s) for s in sales]})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/players/search')
+    @auth_req
+    def api_players_search():
+        try:
+            q = (request.args.get('q') or '').strip()
+            if not q:
+                return jsonify({'success': True, 'players': []})
+            rows = db.query("""
+                SELECT ps.player_controller_id as id, ps.character_name as name,
+                       ps.online_status::text as online_status
+                FROM dune.player_state ps
+                WHERE ps.character_name ILIKE %s
+                ORDER BY ps.character_name
+                LIMIT 20
+            """, [f'%{q}%']) or []
+            return jsonify({'success': True, 'players': [dict(r) for r in rows]})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    # ── Player maintenance actions ─────────────────────────────────────────────
+
+    @app.route('/api/player/<int:player_id>/rename', methods=['POST'])
+    @auth_req
+    def api_rename_player(player_id):
+        try:
+            new_name = (request.form.get('name') or '').strip()
+            if not new_name:
+                return jsonify({'success': False, 'error': 'Name is required'})
+            row = db.query("SELECT account_id FROM dune.player_state WHERE player_controller_id = %s LIMIT 1", [player_id], one=True)
+            if not row:
+                return jsonify({'success': False, 'error': 'Player not found'})
+            success, msg = admin_svc.rename_character(row['account_id'], new_name)
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/repair_gear', methods=['POST'])
+    @auth_req
+    def api_repair_gear(player_id):
+        try:
+            row = db.query("SELECT player_pawn_id FROM dune.player_state WHERE player_controller_id = %s LIMIT 1", [player_id], one=True)
+            if not row:
+                return jsonify({'success': False, 'error': 'Player not found'})
+            success, msg = admin_svc.repair_gear(row['player_pawn_id'])
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/fill_water', methods=['POST'])
+    @auth_req
+    def api_fill_water(player_id):
+        try:
+            row = db.query("SELECT player_pawn_id FROM dune.player_state WHERE player_controller_id = %s LIMIT 1", [player_id], one=True)
+            if not row:
+                return jsonify({'success': False, 'error': 'Player not found'})
+            success, msg = admin_svc.fill_water(row['player_pawn_id'])
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/wipe_codex', methods=['POST'])
+    @auth_req
+    def api_wipe_codex(player_id):
+        try:
+            row = db.query("SELECT account_id FROM dune.player_state WHERE player_controller_id = %s LIMIT 1", [player_id], one=True)
+            if not row:
+                return jsonify({'success': False, 'error': 'Player not found'})
+            success, msg = admin_svc.wipe_codex(row['account_id'])
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/dismiss_tutorials', methods=['POST'])
+    @auth_req
+    def api_dismiss_tutorials(player_id):
+        try:
+            row = db.query("SELECT player_pawn_id FROM dune.player_state WHERE player_controller_id = %s LIMIT 1", [player_id], one=True)
+            if not row:
+                return jsonify({'success': False, 'error': 'Player not found'})
+            success, msg = admin_svc.dismiss_tutorials(row['player_pawn_id'])
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/grant_keystones', methods=['POST'])
+    @auth_req
+    def api_grant_keystones(player_id):
+        try:
+            row = db.query("SELECT player_pawn_id FROM dune.player_state WHERE player_controller_id = %s LIMIT 1", [player_id], one=True)
+            pawn_id = row['player_pawn_id'] if row else None
+            success, msg = admin_svc.grant_keystones(player_id, pawn_id)
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/reset_keystones', methods=['POST'])
+    @auth_req
+    def api_reset_keystones(player_id):
+        try:
+            row = db.query("SELECT player_pawn_id FROM dune.player_state WHERE player_controller_id = %s LIMIT 1", [player_id], one=True)
+            pawn_id = row['player_pawn_id'] if row else None
+            success, msg = admin_svc.reset_keystones(player_id, pawn_id)
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/complete_journey', methods=['POST'])
+    @auth_req
+    def api_complete_journey(player_id):
+        try:
+            node_id = (request.form.get('node_id') or '').strip()
+            if not node_id:
+                return jsonify({'success': False, 'error': 'node_id is required'})
+            row = db.query("SELECT account_id FROM dune.player_state WHERE player_controller_id = %s LIMIT 1", [player_id], one=True)
+            if not row:
+                return jsonify({'success': False, 'error': 'Player not found'})
+            success, msg = admin_svc.complete_journey_node(row['account_id'], node_id)
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/reset_journey', methods=['POST'])
+    @auth_req
+    def api_reset_journey(player_id):
+        try:
+            node_id = (request.form.get('node_id') or '').strip()
+            if not node_id:
+                return jsonify({'success': False, 'error': 'node_id is required'})
+            row = db.query("SELECT account_id FROM dune.player_state WHERE player_controller_id = %s LIMIT 1", [player_id], one=True)
+            if not row:
+                return jsonify({'success': False, 'error': 'Player not found'})
+            success, msg = admin_svc.reset_journey_node(row['account_id'], node_id)
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/wipe_journey', methods=['POST'])
+    @auth_req
+    def api_wipe_journey(player_id):
+        try:
+            row = db.query("SELECT account_id FROM dune.player_state WHERE player_controller_id = %s LIMIT 1", [player_id], one=True)
+            if not row:
+                return jsonify({'success': False, 'error': 'Player not found'})
+            success, msg = admin_svc.wipe_journey(row['account_id'])
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    # ── RMQ player commands ────────────────────────────────────────────────────
+
+    @app.route('/api/player/<int:player_id>/award_xp', methods=['POST'])
+    @auth_req
+    def api_award_xp(player_id):
+        try:
+            category = (request.form.get('category') or '').strip()
+            amount = request.form.get('amount', type=int)
+            if not category or not amount:
+                return jsonify({'success': False, 'error': 'category and amount are required'})
+            row = db.query("SELECT ea.platform_id FROM dune.player_state ps JOIN dune.encrypted_accounts ea ON ea.id = ps.account_id WHERE ps.player_controller_id = %s LIMIT 1", [player_id], one=True)
+            if not row:
+                return jsonify({'success': False, 'error': 'Player not found'})
+            success, msg = admin_svc.award_xp_rmq(row['platform_id'], category, amount)
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/set_skill_points', methods=['POST'])
+    @auth_req
+    def api_set_skill_points(player_id):
+        try:
+            points = request.form.get('points', type=int)
+            if points is None:
+                return jsonify({'success': False, 'error': 'points is required'})
+            row = db.query("SELECT ea.platform_id FROM dune.player_state ps JOIN dune.encrypted_accounts ea ON ea.id = ps.account_id WHERE ps.player_controller_id = %s LIMIT 1", [player_id], one=True)
+            if not row:
+                return jsonify({'success': False, 'error': 'Player not found'})
+            success, msg = admin_svc.set_skill_points_rmq(row['platform_id'], points)
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/teleport_to_player', methods=['POST'])
+    @auth_req
+    def api_teleport_to_player(player_id):
+        try:
+            target_id = request.form.get('target_id', type=int)
+            if not target_id:
+                return jsonify({'success': False, 'error': 'target_id is required'})
+            success, msg = admin_svc.teleport_to_player(player_id, target_id)
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/player/<int:player_id>/spawn_vehicle', methods=['POST'])
+    @auth_req
+    def api_spawn_vehicle(player_id):
+        try:
+            class_name = (request.form.get('class_name') or '').strip()
+            x = request.form.get('x', type=float)
+            y = request.form.get('y', type=float)
+            z = request.form.get('z', type=float)
+            faction = request.form.get('faction') or None
+            if not class_name:
+                return jsonify({'success': False, 'error': 'class_name is required'})
+            if x is None or y is None or z is None:
+                return jsonify({'success': False, 'error': 'x, y, z are required'})
+            row = db.query("SELECT ea.platform_id FROM dune.player_state ps JOIN dune.encrypted_accounts ea ON ea.id = ps.account_id WHERE ps.player_controller_id = %s LIMIT 1", [player_id], one=True)
+            if not row:
+                return jsonify({'success': False, 'error': 'Player not found'})
+            success, msg = admin_svc.spawn_vehicle(row['platform_id'], class_name, x, y, z, faction)
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    # ── Server broadcasts ──────────────────────────────────────────────────────
+
+    @app.route('/api/service_broadcast', methods=['POST'])
+    @auth_req
+    def api_service_broadcast():
+        try:
+            title = (request.form.get('title') or '').strip()
+            body = (request.form.get('body') or '').strip()
+            duration = request.form.get('duration', type=int, default=30)
+            if not title and not body:
+                return jsonify({'success': False, 'error': 'title or body is required'})
+            success, msg = admin_svc.service_broadcast(title, body, duration)
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    @app.route('/api/shutdown_broadcast', methods=['POST'])
+    @auth_req
+    def api_shutdown_broadcast():
+        try:
+            shutdown_type = (request.form.get('type') or 'Restart').strip()
+            seconds_until = request.form.get('seconds', type=int)
+            frequency = request.form.get('frequency', type=int, default=30)
+            cancel = request.form.get('cancel', '').lower() in ('1', 'true', 'yes')
+            if shutdown_type not in ('Restart', 'Maintenance', 'Update'):
+                return jsonify({'success': False, 'error': 'type must be Restart, Maintenance, or Update'})
+            if not cancel and not seconds_until:
+                return jsonify({'success': False, 'error': 'seconds is required'})
+            success, msg = admin_svc.shutdown_broadcast(shutdown_type, seconds_until or 0, frequency, cancel)
+            return jsonify({'success': success, 'message': msg} if success else {'success': False, 'error': msg})
+        except Exception as e:
             return jsonify({'success': False, 'error': str(e)})

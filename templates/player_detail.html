@@ -100,6 +100,54 @@
     </div>
 </div>
 
+{% if extended_stats and (extended_stats.total_xp is not none or extended_stats.poi_count is not none) %}
+<div class="detail-section">
+    <h2>Extended Stats</h2>
+    <div class="detail-grid">
+        {% if extended_stats.total_xp is not none %}
+        <div class="detail-item"><div class="dlabel">Total XP Earned</div><div class="dvalue">{{ extended_stats.total_xp | format_number }}</div></div>
+        {% endif %}
+        {% if extended_stats.total_skill_points is not none %}
+        <div class="detail-item"><div class="dlabel">Total Skill Points</div><div class="dvalue">{{ extended_stats.total_skill_points }}</div></div>
+        {% endif %}
+        {% if extended_stats.unspent_skill_points is not none %}
+        <div class="detail-item"><div class="dlabel">Unspent Skill Points</div><div class="dvalue">{{ extended_stats.unspent_skill_points }}</div></div>
+        {% endif %}
+        {% if extended_stats.poi_count is not none %}
+        <div class="detail-item"><div class="dlabel">POIs Discovered</div><div class="dvalue">{{ extended_stats.poi_count }}</div></div>
+        {% endif %}
+        {% if extended_stats.big_moments_count is not none %}
+        <div class="detail-item"><div class="dlabel">Story Milestones</div><div class="dvalue">{{ extended_stats.big_moments_count }}</div></div>
+        {% endif %}
+        {% if extended_stats.max_faction_tier is not none %}
+        <div class="detail-item"><div class="dlabel">Max Faction Tier</div><div class="dvalue">{{ extended_stats.max_faction_tier }}</div></div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if not is_readonly %}
+<div class="detail-section">
+    <h2>Admin Actions</h2>
+    <div class="card" style="padding:12px 16px;">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+            <button onclick="openRenameModal()" class="btn-edit">Rename</button>
+            <button onclick="confirmAction('repair_gear', 'Repair all gear for {{ player.player_name | escapejs }}?')" class="btn-edit">Repair Gear</button>
+            <button onclick="confirmAction('fill_water', 'Fill all water containers for {{ player.player_name | escapejs }}?')" class="btn-edit">Fill Water</button>
+            <button onclick="confirmAction('wipe_codex', 'Wipe codex for {{ player.player_name | escapejs }}? This resets all lore discoveries.')" class="btn-edit">Wipe Codex</button>
+            <button onclick="confirmAction('dismiss_tutorials', 'Dismiss all tutorials for {{ player.player_name | escapejs }}?')" class="btn-edit">Dismiss Tutorials</button>
+            {% if is_online %}
+            <button onclick="openAwardXpModal()" class="btn-edit">Award XP</button>
+            <button onclick="openSetSkillPointsModal()" class="btn-edit">Set Skill Points</button>
+            <button onclick="openTeleportToPlayerModal()" class="btn-edit">Teleport to Player</button>
+            <button onclick="openSpawnVehicleModal()" class="btn-edit">Spawn Vehicle</button>
+            {% endif %}
+        </div>
+        <div id="admin-action-status" style="display:none;margin-top:8px;font-size:13px;"></div>
+    </div>
+</div>
+{% endif %}
+
 {% if player.last_login_time or player.last_avatar_activity %}
 <div class="detail-section">
     <h2>Activity</h2>
@@ -176,6 +224,8 @@
     <h2>Specialization & XP
         {% if not is_readonly %}
         <button onclick="openModal('spec-modal')" class="btn-edit">Edit</button>
+        <button onclick="confirmAction('grant_keystones', 'Grant all 205 keystones to {{ player.player_name | escapejs }}?')" class="btn-edit" style="margin-left:6px;">Grant Keystones</button>
+        <button onclick="confirmAction('reset_keystones', 'Reset ALL keystones for {{ player.player_name | escapejs }}? This cannot be undone.')" class="btn-danger" style="margin-left:4px;font-size:11px;padding:2px 8px;">Reset Keystones</button>
         {% endif %}
     </h2>
     <div class="card">
@@ -571,6 +621,66 @@
 </div>
 {% endif %}
 
+{% if dungeon_history %}
+<div class="detail-section">
+    <details>
+        <summary style="cursor:pointer;font-size:16px;font-weight:600;padding:4px 0;">Dungeon History ({{ dungeon_history|length }})</summary>
+        <div class="card" style="margin-top:8px;">
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Dungeon ID</th><th>Difficulty</th><th style="text-align:right;">Duration</th><th style="text-align:center;">Players</th></tr></thead>
+                    <tbody>
+                        {% for d in dungeon_history %}
+                        <tr>
+                            <td style="font-size:12px;">{{ d.dungeon_id }}</td>
+                            <td>{{ d.difficulty or '—' }}</td>
+                            <td style="text-align:right;">{% if d.duration_ms %}{{ "%.1f"|format(d.duration_ms / 60000) }}m{% else %}—{% endif %}</td>
+                            <td style="text-align:center;">{{ d.players_num or '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </details>
+</div>
+{% endif %}
+
+{% if journey_nodes %}
+<div class="detail-section">
+    <details>
+        <summary style="cursor:pointer;font-size:16px;font-weight:600;padding:4px 0;">Journey Nodes ({{ journey_nodes|length }} tracked)</summary>
+        <div style="font-size:12px;color:var(--text-muted);margin:4px 0 8px;">Nodes in the DB — only shows nodes the game has touched, not the full journey tree.</div>
+        {% if not is_readonly %}
+        <div style="margin-bottom:8px;">
+            <input type="text" id="journey-node-input" placeholder="Node ID (e.g. Tutorial.Step1)" style="width:280px;font-size:12px;">
+            <button onclick="completeJourneyNode()" class="btn-edit" style="font-size:11px;padding:2px 8px;margin-left:4px;">Complete Node</button>
+            <button onclick="resetJourneyNode()" class="btn-edit" style="font-size:11px;padding:2px 8px;margin-left:4px;">Reset Node</button>
+            <button onclick="confirmAction('wipe_journey', 'Wipe ALL journey nodes for {{ player.player_name | escapejs }}? This cannot be undone.')" class="btn-danger" style="font-size:11px;padding:2px 8px;margin-left:4px;">Wipe All</button>
+        </div>
+        <div id="journey-action-status" style="display:none;font-size:12px;margin-bottom:8px;"></div>
+        {% endif %}
+        <div class="card">
+            <div class="table-wrap" style="max-height:300px;overflow-y:auto;">
+                <table>
+                    <thead><tr><th>Node ID</th><th style="text-align:center;">Complete</th><th style="text-align:center;">Revealed</th><th style="text-align:center;">Pending Reward</th></tr></thead>
+                    <tbody>
+                        {% for n in journey_nodes %}
+                        <tr>
+                            <td style="font-size:11px;font-family:monospace;">{{ n.story_node_id }}</td>
+                            <td style="text-align:center;">{% if n.is_complete %}<span style="color:#2ecc71;">✓</span>{% else %}<span style="color:#e74c3c;">✗</span>{% endif %}</td>
+                            <td style="text-align:center;">{% if n.is_revealed %}<span style="color:#2ecc71;">✓</span>{% else %}—{% endif %}</td>
+                            <td style="text-align:center;">{% if n.has_pending_reward %}<span style="color:#f39c12;">✓</span>{% else %}—{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </details>
+</div>
+{% endif %}
+
 <!-- Teleport Modal -->
 {% if not is_readonly %}
 <div id="teleport-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('teleport-modal')">
@@ -621,6 +731,122 @@
         <div class="modal-actions">
             <button type="button" id="whisper-btn" onclick="submitWhisper()" class="btn-save">Send</button>
             <button type="button" onclick="closeModal('whisper-modal')" class="btn-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Rename Modal -->
+{% if not is_readonly %}
+<div id="rename-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('rename-modal')">
+    <div class="modal" style="max-width:380px;">
+        <h3>Rename Character</h3>
+        <div class="catalog-form-row">
+            <label>New Name</label>
+            <input type="text" id="rename-name-input" maxlength="50" style="width:100%;" placeholder="{{ player.player_name | escapejs }}">
+        </div>
+        <div id="rename-status" style="display:none;font-size:13px;margin-top:8px;"></div>
+        <div class="modal-actions">
+            <button type="button" id="rename-btn" onclick="submitRenamePlayer()" class="btn-save">Rename</button>
+            <button type="button" onclick="closeModal('rename-modal')" class="btn-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Award XP Modal -->
+<div id="award-xp-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('award-xp-modal')">
+    <div class="modal" style="max-width:380px;">
+        <h3>Award XP <span style="font-size:12px;color:#e67e22;">(online only — RMQ)</span></h3>
+        <div class="catalog-form-row">
+            <label>Category</label>
+            <select id="xp-category" style="width:100%;">
+                <option value="Combat">Combat</option>
+                <option value="Crafting">Crafting</option>
+                <option value="Exploration">Exploration</option>
+                <option value="Gathering">Gathering</option>
+                <option value="Sabotage">Sabotage</option>
+            </select>
+        </div>
+        <div class="catalog-form-row">
+            <label>Amount</label>
+            <input type="number" id="xp-amount" min="1" max="100000" value="1000" style="width:100%;">
+        </div>
+        <div id="award-xp-status" style="display:none;font-size:13px;margin-top:8px;"></div>
+        <div class="modal-actions">
+            <button type="button" id="award-xp-btn" onclick="submitAwardXp()" class="btn-save">Award</button>
+            <button type="button" onclick="closeModal('award-xp-modal')" class="btn-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Set Skill Points Modal -->
+<div id="set-sp-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('set-sp-modal')">
+    <div class="modal" style="max-width:360px;">
+        <h3>Set Unspent Skill Points <span style="font-size:12px;color:#e67e22;">(online only — RMQ)</span></h3>
+        <div class="catalog-form-row">
+            <label>Skill Points</label>
+            <input type="number" id="sp-amount" min="0" max="9999" value="0" style="width:100%;">
+        </div>
+        <div id="set-sp-status" style="display:none;font-size:13px;margin-top:8px;"></div>
+        <div class="modal-actions">
+            <button type="button" id="set-sp-btn" onclick="submitSetSkillPoints()" class="btn-save">Set</button>
+            <button type="button" onclick="closeModal('set-sp-modal')" class="btn-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Teleport to Player Modal -->
+<div id="tp-player-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('tp-player-modal')">
+    <div class="modal" style="max-width:420px;">
+        <h3>Teleport to Player <span style="font-size:12px;color:#e67e22;">(online only — RMQ)</span></h3>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Move <strong>{{ player.player_name }}</strong> to another player's exact location.</div>
+        <div class="catalog-form-row">
+            <label>Search target player</label>
+            <input type="text" id="tp-player-search" placeholder="Type character name…" oninput="searchTpTarget(this.value)" style="width:100%;" autocomplete="off">
+        </div>
+        <div id="tp-player-results" class="catalog-results" style="max-height:180px;">
+            <div class="catalog-no-results">Type to search…</div>
+        </div>
+        <input type="hidden" id="tp-player-target-id">
+        <div id="tp-player-selected" style="display:none;font-size:13px;color:#2ecc71;margin-top:6px;"></div>
+        <div id="tp-player-status" style="display:none;font-size:13px;margin-top:8px;"></div>
+        <div class="modal-actions">
+            <button type="button" id="tp-player-btn" onclick="submitTeleportToPlayer()" class="btn-save">Teleport</button>
+            <button type="button" onclick="closeModal('tp-player-modal')" class="btn-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Spawn Vehicle Modal -->
+<div id="spawn-vehicle-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('spawn-vehicle-modal')">
+    <div class="modal" style="max-width:440px;">
+        <h3>Spawn Vehicle <span style="font-size:12px;color:#e67e22;">(online only — RMQ)</span></h3>
+        <div class="catalog-form-row">
+            <label>Vehicle Class</label>
+            <input type="text" id="sv-class" placeholder="e.g. BP_Sandbike_CHOAM_C" style="width:100%;">
+        </div>
+        <div style="display:flex;gap:10px;">
+            <div class="catalog-form-row" style="flex:1;">
+                <label>X</label>
+                <input type="number" id="sv-x" step="1" value="{{ "%.0f"|format(player.pos_x or 0) }}" style="width:100%;">
+            </div>
+            <div class="catalog-form-row" style="flex:1;">
+                <label>Y</label>
+                <input type="number" id="sv-y" step="1" value="{{ "%.0f"|format(player.pos_y or 0) }}" style="width:100%;">
+            </div>
+            <div class="catalog-form-row" style="flex:1;">
+                <label>Z</label>
+                <input type="number" id="sv-z" step="1" value="{{ "%.0f"|format(player.pos_z or 0) }}" style="width:100%;">
+            </div>
+        </div>
+        <div class="catalog-form-row">
+            <label>Faction <span style="font-weight:normal;color:var(--text-muted);">(optional)</span></label>
+            <input type="text" id="sv-faction" placeholder="e.g. Atreides" style="width:100%;">
+        </div>
+        <div id="sv-status" style="display:none;font-size:13px;margin-top:8px;"></div>
+        <div class="modal-actions">
+            <button type="button" id="sv-btn" onclick="submitSpawnVehicle()" class="btn-save">Spawn</button>
+            <button type="button" onclick="closeModal('spawn-vehicle-modal')" class="btn-cancel">Cancel</button>
         </div>
     </div>
 </div>
@@ -1321,6 +1547,262 @@ function onPkgSelect() {
         document.getElementById('give-pkg-preview-text').textContent = txt;
         preview.style.display = '';
     }
+}
+
+const PLAYER_ID = {{ player.player_controller_id or 'null' }};
+
+async function confirmAction(action, msg) {
+    if (!confirm(msg)) return;
+    const status = document.getElementById('admin-action-status');
+    status.style.display = '';
+    status.style.color = 'var(--text-muted)';
+    status.textContent = 'Working…';
+    try {
+        const r = await csrfFetch(`/api/player/${PLAYER_ID}/${action}`, { method: 'POST' });
+        const j = await r.json();
+        if (j.success) {
+            status.style.color = 'var(--success, #2ecc71)';
+            status.textContent = j.message;
+        } else {
+            status.style.color = '#e74c3c';
+            status.textContent = j.error;
+        }
+    } catch(e) {
+        status.style.color = '#e74c3c';
+        status.textContent = 'Request failed.';
+    }
+}
+
+function openRenameModal() {
+    document.getElementById('rename-name-input').value = '';
+    document.getElementById('rename-status').style.display = 'none';
+    document.getElementById('rename-btn').disabled = false;
+    document.getElementById('rename-btn').textContent = 'Rename';
+    document.getElementById('rename-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('rename-name-input').focus(), 50);
+}
+
+async function submitRenamePlayer() {
+    const name = document.getElementById('rename-name-input').value.trim();
+    if (!name) { alert('Name is required.'); return; }
+    const btn = document.getElementById('rename-btn');
+    const status = document.getElementById('rename-status');
+    btn.disabled = true; btn.textContent = 'Renaming…'; status.style.display = 'none';
+    const data = new FormData(); data.append('name', name);
+    try {
+        const r = await csrfFetch(`/api/player/${PLAYER_ID}/rename`, { method: 'POST', body: data });
+        const j = await r.json();
+        status.style.display = '';
+        if (j.success) {
+            status.style.color = 'var(--success, #2ecc71)'; status.textContent = j.message;
+            btn.textContent = 'Done';
+            setTimeout(() => { closeModal('rename-modal'); location.reload(); }, 1500);
+        } else {
+            status.style.color = '#e74c3c'; status.textContent = j.error;
+            btn.disabled = false; btn.textContent = 'Rename';
+        }
+    } catch(e) {
+        status.style.display = ''; status.style.color = '#e74c3c'; status.textContent = 'Request failed.';
+        btn.disabled = false; btn.textContent = 'Rename';
+    }
+}
+
+function openAwardXpModal() {
+    document.getElementById('award-xp-status').style.display = 'none';
+    document.getElementById('award-xp-btn').disabled = false;
+    document.getElementById('award-xp-btn').textContent = 'Award';
+    document.getElementById('award-xp-modal').style.display = 'flex';
+}
+
+async function submitAwardXp() {
+    const category = document.getElementById('xp-category').value;
+    const amount = document.getElementById('xp-amount').value;
+    if (!amount || parseInt(amount) <= 0) { alert('Enter a positive XP amount.'); return; }
+    const btn = document.getElementById('award-xp-btn');
+    const status = document.getElementById('award-xp-status');
+    btn.disabled = true; btn.textContent = 'Sending…'; status.style.display = 'none';
+    const data = new FormData(); data.append('category', category); data.append('amount', amount);
+    try {
+        const r = await csrfFetch(`/api/player/${PLAYER_ID}/award_xp`, { method: 'POST', body: data });
+        const j = await r.json();
+        status.style.display = '';
+        if (j.success) {
+            status.style.color = 'var(--success, #2ecc71)'; status.textContent = j.message;
+            btn.textContent = 'Sent'; setTimeout(() => closeModal('award-xp-modal'), 1500);
+        } else {
+            status.style.color = '#e74c3c'; status.textContent = j.error;
+            btn.disabled = false; btn.textContent = 'Award';
+        }
+    } catch(e) {
+        status.style.display = ''; status.style.color = '#e74c3c'; status.textContent = 'Request failed.';
+        btn.disabled = false; btn.textContent = 'Award';
+    }
+}
+
+function openSetSkillPointsModal() {
+    document.getElementById('set-sp-status').style.display = 'none';
+    document.getElementById('set-sp-btn').disabled = false;
+    document.getElementById('set-sp-btn').textContent = 'Set';
+    document.getElementById('set-sp-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('sp-amount').focus(), 50);
+}
+
+async function submitSetSkillPoints() {
+    const points = document.getElementById('sp-amount').value;
+    const btn = document.getElementById('set-sp-btn');
+    const status = document.getElementById('set-sp-status');
+    btn.disabled = true; btn.textContent = 'Sending…'; status.style.display = 'none';
+    const data = new FormData(); data.append('points', points);
+    try {
+        const r = await csrfFetch(`/api/player/${PLAYER_ID}/set_skill_points`, { method: 'POST', body: data });
+        const j = await r.json();
+        status.style.display = '';
+        if (j.success) {
+            status.style.color = 'var(--success, #2ecc71)'; status.textContent = j.message;
+            btn.textContent = 'Done'; setTimeout(() => closeModal('set-sp-modal'), 1500);
+        } else {
+            status.style.color = '#e74c3c'; status.textContent = j.error;
+            btn.disabled = false; btn.textContent = 'Set';
+        }
+    } catch(e) {
+        status.style.display = ''; status.style.color = '#e74c3c'; status.textContent = 'Request failed.';
+        btn.disabled = false; btn.textContent = 'Set';
+    }
+}
+
+function openTeleportToPlayerModal() {
+    document.getElementById('tp-player-search').value = '';
+    document.getElementById('tp-player-results').innerHTML = '<div class="catalog-no-results">Type to search…</div>';
+    document.getElementById('tp-player-target-id').value = '';
+    document.getElementById('tp-player-selected').style.display = 'none';
+    document.getElementById('tp-player-status').style.display = 'none';
+    document.getElementById('tp-player-btn').disabled = false;
+    document.getElementById('tp-player-btn').textContent = 'Teleport';
+    document.getElementById('tp-player-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('tp-player-search').focus(), 50);
+}
+
+let _tpPlayerTimer = null;
+function searchTpTarget(q) {
+    clearTimeout(_tpPlayerTimer);
+    const results = document.getElementById('tp-player-results');
+    if (!q.trim()) { results.innerHTML = '<div class="catalog-no-results">Type to search…</div>'; return; }
+    results.innerHTML = '<div class="catalog-no-results">Searching…</div>';
+    _tpPlayerTimer = setTimeout(async () => {
+        try {
+            const r = await fetch(`/api/players/search?q=${encodeURIComponent(q)}`);
+            const j = await r.json();
+            if (!j.success || !j.players.length) {
+                results.innerHTML = '<div class="catalog-no-results">No players found.</div>'; return;
+            }
+            results.innerHTML = j.players.map(p => `
+                <div class="catalog-result-item" onclick="selectTpTarget(${p.id}, '${escHtml(p.name).replace(/'/g,'\\x27')}')">
+                    <span class="catalog-result-name">${escHtml(p.name)}</span>
+                    <span class="catalog-result-type" style="color:${p.online_status==='Online'?'#2ecc71':'var(--text-muted)'};">${p.online_status}</span>
+                </div>
+            `).join('');
+        } catch(e) { results.innerHTML = '<div class="catalog-no-results">Search failed.</div>'; }
+    }, 250);
+}
+
+function selectTpTarget(id, name) {
+    document.getElementById('tp-player-target-id').value = id;
+    const sel = document.getElementById('tp-player-selected');
+    sel.textContent = 'Target: ' + name;
+    sel.style.display = '';
+    document.getElementById('tp-player-results').innerHTML = '<div class="catalog-no-results">Type to change target…</div>';
+}
+
+async function submitTeleportToPlayer() {
+    const targetId = document.getElementById('tp-player-target-id').value;
+    if (!targetId) { alert('Select a target player first.'); return; }
+    const btn = document.getElementById('tp-player-btn');
+    const status = document.getElementById('tp-player-status');
+    btn.disabled = true; btn.textContent = 'Teleporting…'; status.style.display = 'none';
+    const data = new FormData(); data.append('target_id', targetId);
+    try {
+        const r = await csrfFetch(`/api/player/${PLAYER_ID}/teleport_to_player`, { method: 'POST', body: data });
+        const j = await r.json();
+        status.style.display = '';
+        if (j.success) {
+            status.style.color = 'var(--success, #2ecc71)'; status.textContent = j.message;
+            btn.textContent = 'Done'; setTimeout(() => closeModal('tp-player-modal'), 1500);
+        } else {
+            status.style.color = '#e74c3c'; status.textContent = j.error;
+            btn.disabled = false; btn.textContent = 'Teleport';
+        }
+    } catch(e) {
+        status.style.display = ''; status.style.color = '#e74c3c'; status.textContent = 'Request failed.';
+        btn.disabled = false; btn.textContent = 'Teleport';
+    }
+}
+
+function openSpawnVehicleModal() {
+    document.getElementById('sv-class').value = '';
+    document.getElementById('sv-status').style.display = 'none';
+    document.getElementById('sv-btn').disabled = false;
+    document.getElementById('sv-btn').textContent = 'Spawn';
+    document.getElementById('spawn-vehicle-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('sv-class').focus(), 50);
+}
+
+async function submitSpawnVehicle() {
+    const cls = document.getElementById('sv-class').value.trim();
+    const x = document.getElementById('sv-x').value;
+    const y = document.getElementById('sv-y').value;
+    const z = document.getElementById('sv-z').value;
+    const faction = document.getElementById('sv-faction').value.trim();
+    if (!cls) { alert('Vehicle class is required.'); return; }
+    const btn = document.getElementById('sv-btn');
+    const status = document.getElementById('sv-status');
+    btn.disabled = true; btn.textContent = 'Spawning…'; status.style.display = 'none';
+    const data = new FormData();
+    data.append('class_name', cls); data.append('x', x); data.append('y', y); data.append('z', z);
+    if (faction) data.append('faction', faction);
+    try {
+        const r = await csrfFetch(`/api/player/${PLAYER_ID}/spawn_vehicle`, { method: 'POST', body: data });
+        const j = await r.json();
+        status.style.display = '';
+        if (j.success) {
+            status.style.color = 'var(--success, #2ecc71)'; status.textContent = j.message;
+            btn.textContent = 'Spawned'; setTimeout(() => closeModal('spawn-vehicle-modal'), 1500);
+        } else {
+            status.style.color = '#e74c3c'; status.textContent = j.error;
+            btn.disabled = false; btn.textContent = 'Spawn';
+        }
+    } catch(e) {
+        status.style.display = ''; status.style.color = '#e74c3c'; status.textContent = 'Request failed.';
+        btn.disabled = false; btn.textContent = 'Spawn';
+    }
+}
+
+async function completeJourneyNode() {
+    const nodeId = document.getElementById('journey-node-input').value.trim();
+    if (!nodeId) { alert('Enter a node ID.'); return; }
+    const status = document.getElementById('journey-action-status');
+    status.style.display = ''; status.style.color = 'var(--text-muted)'; status.textContent = 'Working…';
+    const data = new FormData(); data.append('node_id', nodeId);
+    try {
+        const r = await csrfFetch(`/api/player/${PLAYER_ID}/complete_journey`, { method: 'POST', body: data });
+        const j = await r.json();
+        status.style.color = j.success ? 'var(--success, #2ecc71)' : '#e74c3c';
+        status.textContent = j.success ? j.message : j.error;
+    } catch(e) { status.style.color = '#e74c3c'; status.textContent = 'Request failed.'; }
+}
+
+async function resetJourneyNode() {
+    const nodeId = document.getElementById('journey-node-input').value.trim();
+    if (!nodeId) { alert('Enter a node ID.'); return; }
+    if (!confirm(`Reset journey node "${nodeId}"?`)) return;
+    const status = document.getElementById('journey-action-status');
+    status.style.display = ''; status.style.color = 'var(--text-muted)'; status.textContent = 'Working…';
+    const data = new FormData(); data.append('node_id', nodeId);
+    try {
+        const r = await csrfFetch(`/api/player/${PLAYER_ID}/reset_journey`, { method: 'POST', body: data });
+        const j = await r.json();
+        status.style.color = j.success ? 'var(--success, #2ecc71)' : '#e74c3c';
+        status.textContent = j.success ? j.message : j.error;
+    } catch(e) { status.style.color = '#e74c3c'; status.textContent = 'Request failed.'; }
 }
 
 function openTeleportModal() {

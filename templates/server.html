@@ -252,6 +252,65 @@
 </div>
 {% endif %}
 
+{% if not is_readonly %}
+<div class="card">
+    <div class="card-header">
+        <span>HUD Notification Broadcast</span>
+        <span style="font-size:12px;color:var(--text-muted);">Displays a timed overlay notification to all online players</span>
+    </div>
+    <div class="card-body">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+            <div style="flex:1;min-width:180px;">
+                <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Title</label>
+                <input type="text" id="hud-title" maxlength="100" placeholder="Server Notice" style="width:100%;padding:8px;background:#1a1a2e;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
+            </div>
+            <div style="flex:2;min-width:220px;">
+                <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Body</label>
+                <input type="text" id="hud-body" maxlength="300" placeholder="Message text…" style="width:100%;padding:8px;background:#1a1a2e;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
+            </div>
+            <div style="min-width:80px;">
+                <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Duration (s)</label>
+                <input type="number" id="hud-duration" value="30" min="5" max="300" style="width:100%;padding:8px;background:#1a1a2e;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
+            </div>
+        </div>
+        <button id="hud-btn" onclick="sendHudBroadcast()" style="padding:8px 20px;background:#e67e22;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Send HUD Notification</button>
+        <div id="hud-result" style="display:none;margin-top:8px;font-size:13px;"></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span>Shutdown Countdown Broadcast</span>
+        <span style="font-size:12px;color:var(--text-muted);">Displays a structured shutdown warning with countdown to all players</span>
+    </div>
+    <div class="card-body">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+            <div>
+                <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Type</label>
+                <select id="sd-type" style="padding:8px;background:#1a1a2e;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
+                    <option value="Restart">Restart</option>
+                    <option value="Maintenance">Maintenance</option>
+                    <option value="Update">Update</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Seconds until</label>
+                <input type="number" id="sd-seconds" value="300" min="30" style="width:100px;padding:8px;background:#1a1a2e;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
+            </div>
+            <div>
+                <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Frequency (s)</label>
+                <input type="number" id="sd-frequency" value="30" min="10" style="width:80px;padding:8px;background:#1a1a2e;border:1px solid #444;border-radius:6px;color:#e0d5c7;font-size:13px;">
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <button id="sd-btn" onclick="sendShutdownBroadcast(false)" style="padding:8px 18px;background:#c0392b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">Send Shutdown Warning</button>
+            <button onclick="sendShutdownBroadcast(true)" style="padding:8px 14px;background:#2a3a4a;color:#e0d5c7;border:1px solid #444;border-radius:6px;cursor:pointer;font-size:13px;">Cancel Shutdown</button>
+        </div>
+        <div id="sd-result" style="display:none;margin-top:8px;font-size:13px;"></div>
+    </div>
+</div>
+{% endif %}
+
 <div class="card">
     <div class="card-header" style="cursor:pointer;" onclick="document.getElementById('sched-section').classList.toggle('hidden');">
         <span>Scheduled Restarts</span>
@@ -1206,5 +1265,49 @@ document.getElementById('backup-create-btn')?.addEventListener('click', async fu
 });
 
 loadBackups();
+
+async function sendHudBroadcast() {
+    const title = document.getElementById('hud-title').value.trim();
+    const body = document.getElementById('hud-body').value.trim();
+    const duration = document.getElementById('hud-duration').value;
+    const result = document.getElementById('hud-result');
+    const btn = document.getElementById('hud-btn');
+    if (!title && !body) { result.style.display=''; result.style.color='var(--danger)'; result.textContent='Enter a title or body.'; return; }
+    btn.disabled = true; btn.textContent = 'Sending…'; result.style.display = 'none';
+    const data = new FormData();
+    data.append('title', title); data.append('body', body); data.append('duration', duration);
+    try {
+        const r = await csrfFetch('/api/service_broadcast', { method: 'POST', body: data });
+        const j = await r.json();
+        result.style.display = '';
+        result.style.color = j.success ? 'var(--success)' : 'var(--danger)';
+        result.textContent = j.success ? j.message : j.error;
+    } catch(e) {
+        result.style.display = ''; result.style.color = 'var(--danger)'; result.textContent = 'Request failed.';
+    }
+    btn.disabled = false; btn.textContent = 'Send HUD Notification';
+}
+
+async function sendShutdownBroadcast(cancel) {
+    const type = document.getElementById('sd-type').value;
+    const seconds = document.getElementById('sd-seconds').value;
+    const frequency = document.getElementById('sd-frequency').value;
+    const result = document.getElementById('sd-result');
+    const btn = document.getElementById('sd-btn');
+    btn.disabled = true; result.style.display = 'none';
+    const data = new FormData();
+    data.append('type', type); data.append('seconds', seconds); data.append('frequency', frequency);
+    if (cancel) data.append('cancel', '1');
+    try {
+        const r = await csrfFetch('/api/shutdown_broadcast', { method: 'POST', body: data });
+        const j = await r.json();
+        result.style.display = '';
+        result.style.color = j.success ? 'var(--success)' : 'var(--danger)';
+        result.textContent = j.success ? j.message : j.error;
+    } catch(e) {
+        result.style.display = ''; result.style.color = 'var(--danger)'; result.textContent = 'Request failed.';
+    }
+    btn.disabled = false;
+}
 </script>
 {% endblock %}

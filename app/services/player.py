@@ -420,3 +420,172 @@ class PlayerService:
             ) or {}
         except Exception:
             return {}
+
+    def get_player_extended_stats(self, account_id, player_pawn_id):
+        """Char XP, skill points from fgl_entities; POI/milestone counts from player_tags."""
+        stats = {'total_xp': None, 'total_skill_points': None, 'unspent_skill_points': None,
+                 'poi_count': None, 'big_moments_count': None, 'max_faction_tier': None}
+        if not account_id:
+            return stats
+        try:
+            row = self.db.query("""
+                SELECT
+                    COALESCE((fe.components->'FLevelComponent'->1->>'TotalXPEarned')::bigint, 0) as total_xp,
+                    COALESCE((fe.components->'FLevelComponent'->1->>'TotalSkillPoints')::int, 0) as total_skill_points,
+                    COALESCE((fe.components->'FLevelComponent'->1->>'UnspentSkillPoints')::int, 0) as unspent_skill_points
+                FROM dune.fgl_entities fe
+                JOIN dune.actor_fgl_entities afe ON afe.entity_id = fe.entity_id
+                WHERE afe.slot_name = 'DuneCharacter' AND afe.actor_id = %s
+                LIMIT 1
+            """, [player_pawn_id], one=True)
+            if row:
+                stats.update(dict(row))
+        except Exception:
+            pass
+        try:
+            tag_row = self.db.query("""
+                SELECT
+                    COUNT(*) FILTER (WHERE tag LIKE 'Exploration.POI.%%') as poi_count,
+                    COUNT(*) FILTER (WHERE tag LIKE 'BigMoments.%%.Complete') as big_moments_count,
+                    COALESCE(MAX(CASE WHEN tag ~ '^Faction\\.[^.]+\\.Tier[0-9]+$'
+                        THEN CAST(SUBSTRING(tag FROM '[0-9]+$') AS INTEGER) ELSE NULL END), 0) as max_faction_tier
+                FROM dune.player_tags WHERE account_id = %s
+            """, [account_id], one=True)
+            if tag_row:
+                stats.update({k: v for k, v in dict(tag_row).items() if v is not None})
+        except Exception:
+            pass
+        return stats
+
+    def get_player_dungeon_history(self, player_pawn_id, limit=50):
+        if not player_pawn_id:
+            return []
+        try:
+            return self.db.query("""
+                SELECT dc.dungeon_id, dc.difficulty::text as difficulty,
+                       dc.duration_ms, dc.players_num, dc.completion_id
+                FROM dune.dungeon_completion_players dcp
+                JOIN dune.dungeon_completion dc ON dc.completion_id = dcp.completion_id
+                WHERE dcp.player_id = %s::bigint
+                ORDER BY dc.completion_id DESC
+                LIMIT %s
+            """, [player_pawn_id, limit]) or []
+        except Exception:
+            return []
+
+    def get_player_currency_history(self, account_id, limit=100):
+        if not account_id:
+            return []
+        try:
+            return self.db.query("""
+                SELECT
+                    to_char(el.event_time AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') as event_time,
+                    ROUND((el.meta->>'solaris_balance')::float)::bigint as balance,
+                    COALESCE(ROUND((el.meta->>'solaris_delta')::float)::bigint, 0) as delta
+                FROM dune.event_log el
+                JOIN dune.accounts ac ON ac."user" = el.meta->>'fls_id'
+                WHERE ac.id = %s AND el.meta->>'solaris_balance' IS NOT NULL
+                ORDER BY el.event_time DESC
+                LIMIT %s
+            """, [account_id, limit]) or []
+        except Exception:
+            return []
+
+    def get_player_journey_nodes(self, account_id):
+        if not account_id:
+            return []
+        try:
+            return self.db.query("""
+                SELECT story_node_id,
+                       (complete_condition_state = 'true'::jsonb) AS is_complete,
+                       (reveal_condition_state   = 'true'::jsonb) AS is_revealed,
+                       has_pending_reward
+                FROM dune.journey_story_node
+                WHERE account_id = %s
+                ORDER BY story_node_id
+            """, [account_id]) or []
+        except Exception:
+            return []
+
+    def get_player_tags(self, account_id):
+        if not account_id:
+            return []
+        try:
+            rows = self.db.query(
+                "SELECT tag FROM dune.player_tags WHERE account_id = %s ORDER BY tag",
+                [account_id]
+            ) or []
+            return [r['tag'] for r in rows]
+        except Exception:
+            return []
+
+    def get_storage_containers(self, limit=300):
+        try:
+            return self.db.query("""
+                SELECT p.id, a.id as actor_id, a.class, a.map,
+                       ((a.transform).location).x as pos_x,
+                       ((a.transform).location).y as pos_y,
+                       COALESCE(ps.character_name, 'Unknown') as owner_name,
+                       (SELECT COUNT(*) FROM dune.inventories inv
+                        JOIN dune.items i ON i.inventory_id = inv.id
+                        WHERE inv.actor_id = a.id) as item_count
+                FROM dune.placeables p
+                JOIN dune.actors a ON a.id = p.id
+                LEFT JOIN dune.actors oa ON oa.id = p.owner_entity_id
+                LEFT JOIN dune.player_state ps ON ps.account_id = oa.owner_account_id
+                WHERE a.class ILIKE '%%storage%%' OR a.class ILIKE '%%chest%%'
+                   OR a.class ILIKE '%%container%%' OR a.class ILIKE '%%cache%%'
+                   OR a.class ILIKE '%%stash%%'
+                ORDER BY a.id DESC
+                LIMIT %s
+            """, [limit]) or []
+        except Exception:
+            return []
+
+    def get_container_items(self, actor_id):
+        try:
+            return self.db.query("""
+                SELECT i.id, i.template_id, i.stack_size, i.quality_level,
+                       COALESCE((i.stats->'FItemStackAndDurabilityStats'->1->>'CurrentDurability')::float, 0) as durability,
+                       COALESCE((i.stats->'FItemStackAndDurabilityStats'->1->>'MaxDurability')::float, 0) as max_durability
+                FROM dune.items i
+                JOIN dune.inventories inv ON i.inventory_id = inv.id
+                WHERE inv.actor_id = %s::bigint
+                ORDER BY i.template_id
+            """, [actor_id]) or []
+        except Exception:
+            return []
+
+    def get_market_listings(self):
+        try:
+            return self.db.query("""
+                SELECT o.template_id, o.quality_level,
+                       MIN(o.item_price) AS lowest_price,
+                       COALESCE(SUM(COALESCE(i.stack_size, s.initial_stack_size)), 0) AS total_stock,
+                       COALESCE(SUM(CASE WHEN o.is_npc_order
+                           THEN COALESCE(i.stack_size, s.initial_stack_size) ELSE 0 END), 0) AS bot_stock,
+                       COUNT(*) AS listing_count
+                FROM dune.dune_exchange_orders o
+                JOIN dune.dune_exchange_sell_orders s ON s.order_id = o.id
+                LEFT JOIN dune.items i ON i.id = o.item_id
+                GROUP BY o.template_id, o.quality_level
+                ORDER BY o.template_id, o.quality_level
+            """) or []
+        except Exception:
+            return []
+
+    def get_market_sales(self, limit=200):
+        try:
+            return self.db.query("""
+                SELECT f.order_id, o.template_id, o.is_npc_order,
+                       COALESCE(ps.character_name, a.class, 'Unknown') AS seller_name,
+                       o.item_price, f.stack_size
+                FROM dune.dune_exchange_fulfilled_orders f
+                JOIN dune.dune_exchange_orders o ON o.id = f.order_id
+                LEFT JOIN dune.actors a ON a.id = o.owner_id
+                LEFT JOIN dune.player_state ps ON ps.account_id = a.owner_account_id
+                ORDER BY f.order_id DESC
+                LIMIT %s
+            """, [limit]) or []
+        except Exception:
+            return []

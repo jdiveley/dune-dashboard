@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Market - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Market</h1>
+    <p>Active exchange listings and recent sales from the in-game market.</p>
+</div>
+
+{% if db_error %}
+<div class="error-banner danger"><strong>Database Error:</strong> {{ db_error }}</div>
+{% endif %}
+
+<div class="detail-section">
+    <h2>Active Listings <span style="font-size:13px;font-weight:normal;color:var(--text-muted);">({{ listings|length }} item types)</span></h2>
+    <div class="card">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Template ID</th>
+                        <th style="text-align:center;">Quality</th>
+                        <th style="text-align:right;">Lowest Price</th>
+                        <th style="text-align:right;">Total Stock</th>
+                        <th style="text-align:right;">Bot Stock</th>
+                        <th style="text-align:right;">Listings</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in listings %}
+                    <tr>
+                        <td style="font-size:12px;">{{ l.template_id }}</td>
+                        <td style="text-align:center;">{{ l.quality_level or 0 }}</td>
+                        <td style="text-align:right;font-weight:600;">{{ l.lowest_price | format_number }}</td>
+                        <td style="text-align:right;">{{ l.total_stock | format_number }}</td>
+                        <td style="text-align:right;color:var(--text-muted);">{{ l.bot_stock | format_number }}</td>
+                        <td style="text-align:right;">{{ l.listing_count }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="empty">No active listings. The exchange tables may not exist on this server.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="detail-section">
+    <h2>Recent Sales <span style="font-size:13px;font-weight:normal;color:var(--text-muted);">(last {{ sales|length }})</span></h2>
+    <div class="card">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Template ID</th>
+                        <th>Seller</th>
+                        <th style="text-align:center;">Bot?</th>
+                        <th style="text-align:right;">Price</th>
+                        <th style="text-align:right;">Qty</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in sales %}
+                    <tr>
+                        <td style="font-size:12px;">{{ s.template_id }}</td>
+                        <td>{{ s.seller_name }}</td>
+                        <td style="text-align:center;">{% if s.is_npc_order %}<span class="badge badge-info">Bot</span>{% else %}—{% endif %}</td>
+                        <td style="text-align:right;font-weight:600;">{{ s.item_price | format_number }}</td>
+                        <td style="text-align:right;">{{ s.stack_size | format_number }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="empty">No sales history found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

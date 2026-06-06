@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Storage Containers - Dune Awakening Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Storage Containers</h1>
+    <p>All world storage containers and their contents.</p>
+</div>
+
+{% if db_error %}
+<div class="error-banner danger"><strong>Database Error:</strong> {{ db_error }}</div>
+{% endif %}
+
+<div class="card">
+    <div class="table-wrap">
+        <table id="storage-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Class</th>
+                    <th>Map</th>
+                    <th>Owner</th>
+                    <th style="text-align:center;">Items</th>
+                    <th>Position</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in containers %}
+                <tr>
+                    <td style="font-family:monospace;font-size:11px;">{{ c.actor_id }}</td>
+                    <td style="font-size:11px;">{{ c.class | class_name }}</td>
+                    <td>{{ c.map or 'N/A' }}</td>
+                    <td>{{ c.owner_name or '—' }}</td>
+                    <td style="text-align:center;">{{ c.item_count or 0 }}</td>
+                    <td style="font-size:11px;font-family:monospace;">
+                        {% if c.pos_x is not none %}{{ "%.0f"|format(c.pos_x) }}, {{ "%.0f"|format(c.pos_y) }}{% else %}N/A{% endif %}
+                    </td>
+                    <td>
+                        <button class="btn-edit" style="font-size:11px;padding:2px 8px;"
+                            onclick="viewContainer({{ c.actor_id }}, '{{ c.class | class_name | escapejs }}')">View</button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="empty">No storage containers found. The exchange tables may not exist on this server.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Container items modal -->
+<div id="container-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeContainerModal()">
+    <div class="modal modal-wide" style="max-width:700px;">
+        <h3 id="container-modal-title">Container</h3>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Template ID</th><th style="text-align:center;">Stack</th><th style="text-align:center;">Quality</th><th>Durability</th></tr></thead>
+                <tbody id="container-items-body">
+                    <tr><td colspan="4" class="empty">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="modal-actions" style="margin-top:12px;">
+            <button type="button" onclick="closeContainerModal()" class="btn-cancel">Close</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function closeContainerModal() {
+    document.getElementById('container-modal').style.display = 'none';
+}
+
+async function viewContainer(actorId, className) {
+    document.getElementById('container-modal-title').textContent = className + ' (ID: ' + actorId + ')';
+    document.getElementById('container-items-body').innerHTML = '<tr><td colspan="4" class="empty">Loading…</td></tr>';
+    document.getElementById('container-modal').style.display = 'flex';
+    try {
+        const r = await fetch(`/api/storage/${actorId}/items`);
+        const j = await r.json();
+        const tbody = document.getElementById('container-items-body');
+        if (!j.success || !j.items.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="empty">Empty container.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = j.items.map(it => `
+            <tr>
+                <td style="font-size:12px;">${escHtml(it.template_id)}</td>
+                <td style="text-align:center;">${it.stack_size || 1}</td>
+                <td style="text-align:center;">${it.quality_level || 0}</td>
+                <td style="font-size:11px;">${it.max_durability > 0 ? Math.round(it.durability) + ' / ' + Math.round(it.max_durability) : '—'}</td>
+            </tr>
+        `).join('');
+    } catch(e) {
+        document.getElementById('container-items-body').innerHTML = '<tr><td colspan="4" class="empty">Failed to load items.</td></tr>';
+    }
+}
+
+function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+{% endblock %}

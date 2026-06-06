@@ -212,6 +212,13 @@ def register_routes(app, services, settings):
 
             is_online = player_svc.is_online(player_controller_id) if player_controller_id else False
 
+            account_id = player.get('account_id')
+            player_pawn_id = player.get('state_pawn_id')
+
+            extended_stats = player_svc.get_player_extended_stats(account_id, player_pawn_id)
+            dungeon_history = player_svc.get_player_dungeon_history(player_pawn_id)
+            journey_nodes = player_svc.get_player_journey_nodes(account_id)
+
             from app.utils.constants import INVENTORY_HIDDEN_TYPES, INVENTORY_UNKNOWN_TYPES, INVENTORY_PRIMARY_TYPES
             primary_inventories = [inv for inv in inventories if inv['inventory_type'] in INVENTORY_PRIMARY_TYPES and inv['inventory_type'] not in INVENTORY_HIDDEN_TYPES]
             unknown_inventories = [inv for inv in inventories if inv['inventory_type'] in INVENTORY_UNKNOWN_TYPES]
@@ -228,7 +235,9 @@ def register_routes(app, services, settings):
                 specialization=specialization, tech_knowledge=tech_knowledge,
                 purchased_keystones=purchased_keystones, all_keystones=static_data['keystones'],
                 faction_reputation=faction_reputation, landsraad_info=landsraad_info,
-                vitals=vitals, is_online=is_online)
+                vitals=vitals, is_online=is_online,
+                extended_stats=extended_stats, dungeon_history=dungeon_history,
+                journey_nodes=journey_nodes)
         except Exception as e:
             logger.exception("Error in player_detail route")
             return render_template('player_detail.html',
@@ -733,6 +742,29 @@ def register_routes(app, services, settings):
                 map_config=map_config,
                 default_map=default_map,
                 db_error=f"{type(e).__name__}: {e}")
+
+    # Storage containers
+    @app.route('/storage')
+    @login_required
+    def storage():
+        try:
+            containers = player_svc.get_storage_containers()
+            return render_template('storage.html', containers=containers)
+        except Exception as e:
+            logger.exception("Error in storage route")
+            return render_template('storage.html', containers=[], db_error=f"{type(e).__name__}: {e}")
+
+    # Market
+    @app.route('/market')
+    @login_required
+    def market():
+        try:
+            listings = player_svc.get_market_listings()
+            sales = player_svc.get_market_sales()
+            return render_template('market.html', listings=listings, sales=sales)
+        except Exception as e:
+            logger.exception("Error in market route")
+            return render_template('market.html', listings=[], sales=[], db_error=f"{type(e).__name__}: {e}")
 
     # Packages
     @app.route('/packages')

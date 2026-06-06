@@ -946,3 +946,439 @@ class AdminService:
             if cur:
                 cur.close()
             self.db.return_connection(conn)
+
+    # ── RMQ helper ────────────────────────────────────────────────────────────
+
+    def _publish_server_command(self, command_fields):
+        """Wrap a dict as a Version-2 server command and publish via RMQ."""
+        import json as _json, base64 as _b64, time as _time
+        inner = _json.dumps(command_fields, separators=(',', ':'))
+        outer = _json.dumps({"Version": 2, "AuthToken": "Nu6VmPWUMvdPMeB7qErr", "MessageContent": inner}, separators=(',', ':'))
+        outer_b64 = _b64.b64encode(outer.encode('utf-8')).decode('ascii')
+        msg_id = f"dashboard-cmd-{int(_time.time() * 1000)}"
+        erlang = (
+            f'Outer = base64:decode(<<"{outer_b64}">>),\n'
+            f'XName = rabbit_misc:r(<<"/">>, exchange, <<"heartbeats">>),\n'
+            f'X = rabbit_exchange:lookup_or_die(XName),\n'
+            f'MsgId = <<"{msg_id}">>,\n'
+            f'Tag = binary_to_atom(<<"P_basic">>, utf8),\n'
+            f'P = {{Tag, <<"Content">>, undefined, [], undefined, undefined, undefined, undefined, undefined, MsgId, undefined, undefined, <<"fls">>, <<"fls_backend">>, undefined}},\n'
+            f'Content = rabbit_basic:build_content(P, Outer),\n'
+            f'{{ok, Msg}} = rabbit_basic:message(XName, <<"notifications">>, Content),\n'
+            f'rabbit_queue_type:publish_at_most_once(X, Msg).\n'
+        )
+        return self._run_erlang_on_mq_game(erlang)
+
+    # ── Player maintenance ────────────────────────────────────────────────────
+
+    def rename_character(self, account_id, new_name):
+        if not account_id or not new_name:
+            return False, "Missing account_id or name"
+        new_name = str(new_name).strip()
+        if not new_name:
+            return False, "Name cannot be empty"
+        try:
+            ok = self.db.execute("SELECT dune.set_character_name(%s, %s)", [account_id, new_name])
+            if ok:
+                audit_logger.info(f"RENAME: account_id={account_id} new_name={new_name}")
+                return True, f"Character renamed to \"{new_name}\""
+            return False, "Rename stored procedure returned no result"
+        except Exception as e:
+            logger.error(f"rename_character failed: {e}")
+            return False, str(e)
+
+    def repair_gear(self, player_pawn_id):
+        """Repair all durability items in the player's backpack, equipment, and bank slots."""
+        if not player_pawn_id:
+            return False, "Missing player_pawn_id"
+        gear_inv_types = [0, 1, 5, 14, 15, 27, 30]
+        conn = self.db.get_connection()
+        if not conn:
+            return False, "Database connection failed"
+        cur = None
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT i.id,
+                    (i.stats->'FItemStackAndDurabilityStats'->1->>'MaxDurability')::float as max_dur
+                FROM dune.items i
+                JOIN dune.inventories inv ON inv.id = i.inventory_id
+                WHERE inv.actor_id = %s::bigint
+                  AND inv.inventory_type = ANY(%s::int[])
+                  AND i.stats ? 'FItemStackAndDurabilityStats'
+                  AND (i.stats->'FItemStackAndDurabilityStats'->1->>'MaxDurability') IS NOT NULL
+            """, [player_pawn_id, gear_inv_types])
+            items = cur.fetchall()
+            repaired = 0
+            for row in items:
+                item_id = row[0] if isinstance(row, (tuple, list)) else row['id']
+                max_dur = float(row[1] if isinstance(row, (tuple, list)) else row['max_dur']) or 100.0
+                cur.execute("""
+                    UPDATE dune.items
+                    SET stats = jsonb_set(jsonb_set(stats,
+                        '{FItemStackAndDurabilityStats,1,CurrentDurability}', to_jsonb(%s::float8), true),
+                        '{FItemStackAndDurabilityStats,1,DecayedMaxDurability}', to_jsonb(%s::float8), true)
+                    WHERE id = %s
+                """, [max_dur, max_dur, item_id])
+                repaired += 1
+            conn.commit()
+            audit_logger.info(f"REPAIR_GEAR: pawn={player_pawn_id} items_repaired={repaired}")
+            return True, f"Repaired {repaired} item(s)"
+        except Exception as e:
+            logger.error(f"repair_gear failed for pawn {player_pawn_id}: {e}")
+            if conn:
+                conn.rollback()
+            return False, str(e)
+        finally:
+            if cur:
+                cur.close()
+            self.db.return_connection(conn)
+
+    def fill_water(self, player_pawn_id):
+        """Fill all water containers in the player's inventory to max (offline DB path)."""
+        if not player_pawn_id:
+            return False, "Missing player_pawn_id"
+        gear_inv_types = [0, 1, 5, 14, 15, 27, 30]
+        conn = self.db.get_connection()
+        if not conn:
+            return False, "Database connection failed"
+        cur = None
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE dune.items i
+                SET stats = jsonb_set(i.stats, '{FFillableItemStats,1,CurrentAmount}',
+                    (i.stats->'FFillableItemStats'->1->'MaxAmount'))
+                FROM dune.inventories inv
+                WHERE inv.actor_id = %s::bigint
+                  AND inv.inventory_type = ANY(%s::int[])
+                  AND i.inventory_id = inv.id
+                  AND i.stats ? 'FFillableItemStats'
+                  AND (i.stats->'FFillableItemStats'->1->'MaxAmount') IS NOT NULL
+            """, [player_pawn_id, gear_inv_types])
+            count = cur.rowcount
+            conn.commit()
+            audit_logger.info(f"FILL_WATER: pawn={player_pawn_id} items_filled={count}")
+            return True, f"Filled {count} water container(s)"
+        except Exception as e:
+            logger.error(f"fill_water failed for pawn {player_pawn_id}: {e}")
+            if conn:
+                conn.rollback()
+            return False, str(e)
+        finally:
+            if cur:
+                cur.close()
+            self.db.return_connection(conn)
+
+    def wipe_codex(self, account_id):
+        if not account_id:
+            return False, "Missing account_id"
+        try:
+            ok = self.db.execute("SELECT dune.delete_mnemonic_recall_lesson_all(%s)", [account_id])
+            audit_logger.info(f"WIPE_CODEX: account_id={account_id}")
+            return True, "Codex wiped"
+        except Exception as e:
+            logger.error(f"wipe_codex failed for account {account_id}: {e}")
+            return False, str(e)
+
+    def dismiss_tutorials(self, player_pawn_id):
+        if not player_pawn_id:
+            return False, "Missing player_pawn_id"
+        try:
+            ok = self.db.execute("SELECT dune.delete_all_tutorial_entries(%s)", [player_pawn_id])
+            audit_logger.info(f"DISMISS_TUTORIALS: pawn={player_pawn_id}")
+            return True, "Tutorials dismissed"
+        except Exception as e:
+            logger.error(f"dismiss_tutorials failed for pawn {player_pawn_id}: {e}")
+            return False, str(e)
+
+    def grant_keystones(self, player_controller_id, player_pawn_id):
+        """Insert all 205 keystones and update FLevelComponent skill point totals."""
+        if not player_controller_id:
+            return False, "Missing player_controller_id"
+        conn = self.db.get_connection()
+        if not conn:
+            return False, "Database connection failed"
+        cur = None
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO dune.purchased_specialization_keystones (player_id, keystone_id)
+                SELECT %s::bigint, generate_series(1, 205)
+                ON CONFLICT DO NOTHING
+            """, [player_controller_id])
+            inserted = cur.rowcount
+            if player_pawn_id:
+                cur.execute("""
+                    UPDATE dune.fgl_entities
+                    SET components = jsonb_set(jsonb_set(components,
+                        '{FLevelComponent,1,TotalSkillPoints}', to_jsonb(
+                            COALESCE((components->'FLevelComponent'->1->>'TotalSkillPoints')::int, 0) + %s)),
+                        '{FLevelComponent,1,UnspentSkillPoints}', to_jsonb(
+                            COALESCE((components->'FLevelComponent'->1->>'UnspentSkillPoints')::int, 0) + %s))
+                    WHERE entity_id = (
+                        SELECT entity_id FROM dune.actor_fgl_entities
+                        WHERE slot_name = 'DuneCharacter' AND actor_id = %s LIMIT 1)
+                """, [inserted, inserted, player_pawn_id])
+            conn.commit()
+            audit_logger.info(f"GRANT_KEYSTONES: controller={player_controller_id} inserted={inserted}")
+            return True, f"Granted {inserted} keystone(s)"
+        except Exception as e:
+            logger.error(f"grant_keystones failed: {e}")
+            if conn:
+                conn.rollback()
+            return False, str(e)
+        finally:
+            if cur:
+                cur.close()
+            self.db.return_connection(conn)
+
+    def reset_keystones(self, player_controller_id, player_pawn_id):
+        """Delete all purchased keystones and reset skill point totals."""
+        if not player_controller_id:
+            return False, "Missing player_controller_id"
+        conn = self.db.get_connection()
+        if not conn:
+            return False, "Database connection failed"
+        cur = None
+        try:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM dune.purchased_specialization_keystones WHERE player_id = %s", [player_controller_id])
+            deleted = cur.rowcount
+            if player_pawn_id:
+                cur.execute("""
+                    UPDATE dune.fgl_entities
+                    SET components = jsonb_set(jsonb_set(components,
+                        '{FLevelComponent,1,TotalSkillPoints}', to_jsonb(
+                            GREATEST(0, COALESCE((components->'FLevelComponent'->1->>'TotalSkillPoints')::int, 0) - %s))),
+                        '{FLevelComponent,1,UnspentSkillPoints}', to_jsonb(
+                            GREATEST(0, COALESCE((components->'FLevelComponent'->1->>'UnspentSkillPoints')::int, 0) - %s)))
+                    WHERE entity_id = (
+                        SELECT entity_id FROM dune.actor_fgl_entities
+                        WHERE slot_name = 'DuneCharacter' AND actor_id = %s LIMIT 1)
+                """, [deleted, deleted, player_pawn_id])
+            conn.commit()
+            audit_logger.info(f"RESET_KEYSTONES: controller={player_controller_id} deleted={deleted}")
+            return True, f"Reset {deleted} keystone(s)"
+        except Exception as e:
+            logger.error(f"reset_keystones failed: {e}")
+            if conn:
+                conn.rollback()
+            return False, str(e)
+        finally:
+            if cur:
+                cur.close()
+            self.db.return_connection(conn)
+
+    # ── Journey management ────────────────────────────────────────────────────
+
+    def complete_journey_node(self, account_id, node_id):
+        if not account_id or not node_id:
+            return False, "Missing account_id or node_id"
+        conn = self.db.get_connection()
+        if not conn:
+            return False, "Database connection failed"
+        cur = None
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE dune.journey_story_node
+                SET complete_condition_state = 'true'::jsonb,
+                    reveal_condition_state   = 'true'::jsonb
+                WHERE account_id = %s AND (story_node_id = %s OR story_node_id LIKE %s)
+            """, [account_id, node_id, node_id + '.%'])
+            if cur.rowcount == 0:
+                cur.execute("""
+                    INSERT INTO dune.journey_story_node
+                        (account_id, story_node_id, has_pending_reward,
+                         complete_condition_state, reveal_condition_state,
+                         fail_condition_state, metadata_state, reset_group)
+                    VALUES (%s, %s, false, 'true'::jsonb, 'true'::jsonb,
+                            '{}'::jsonb, '{}'::jsonb, 'Default'::dune."JourneyStoryResetGroup")
+                    ON CONFLICT DO NOTHING
+                """, [account_id, node_id])
+            conn.commit()
+            audit_logger.info(f"COMPLETE_JOURNEY: account={account_id} node={node_id}")
+            return True, f"Journey node \"{node_id}\" marked complete"
+        except Exception as e:
+            logger.error(f"complete_journey_node failed: {e}")
+            if conn:
+                conn.rollback()
+            return False, str(e)
+        finally:
+            if cur:
+                cur.close()
+            self.db.return_connection(conn)
+
+    def reset_journey_node(self, account_id, node_id):
+        if not account_id or not node_id:
+            return False, "Missing account_id or node_id"
+        try:
+            ok = self.db.execute("""
+                UPDATE dune.journey_story_node
+                SET complete_condition_state = 'false'::jsonb, has_pending_reward = false
+                WHERE account_id = %s AND (story_node_id = %s OR story_node_id LIKE %s)
+            """, [account_id, node_id, node_id + '.%'])
+            audit_logger.info(f"RESET_JOURNEY: account={account_id} node={node_id}")
+            return True, f"Journey node \"{node_id}\" reset"
+        except Exception as e:
+            return False, str(e)
+
+    def wipe_journey(self, account_id):
+        if not account_id:
+            return False, "Missing account_id"
+        try:
+            ok = self.db.execute("SELECT dune.delete_all_journey_story_nodes(%s)", [account_id])
+            audit_logger.info(f"WIPE_JOURNEY: account={account_id}")
+            return True, "All journey nodes wiped"
+        except Exception as e:
+            return False, str(e)
+
+    # ── RMQ server commands ───────────────────────────────────────────────────
+
+    def award_xp_rmq(self, hex_id, category, amount):
+        """Award specialization XP to an online player via RMQ AwardXP command."""
+        try:
+            amount = int(amount)
+        except (ValueError, TypeError):
+            return False, "Invalid XP amount"
+        ok, result = self._publish_server_command({
+            "ServerCommand": "AwardXP",
+            "PlayerId": hex_id,
+            "Category": category,
+            "Experience": amount,
+        })
+        if ok:
+            audit_logger.info(f"AWARD_XP_RMQ: hex={hex_id} category={category} amount={amount}")
+            return True, f"Awarded {amount} XP in {category}"
+        return False, result
+
+    def set_skill_points_rmq(self, hex_id, points):
+        """Set unspent skill points for an online player via RMQ."""
+        try:
+            points = int(points)
+        except (ValueError, TypeError):
+            return False, "Invalid skill points value"
+        ok, result = self._publish_server_command({
+            "ServerCommand": "SkillsSetUnspentSkillPoints",
+            "PlayerId": hex_id,
+            "SkillPoints": points,
+        })
+        if ok:
+            audit_logger.info(f"SET_SKILL_POINTS_RMQ: hex={hex_id} points={points}")
+            return True, f"Set {points} unspent skill points"
+        return False, result
+
+    def spawn_vehicle(self, hex_id, class_name, x, y, z, faction=None):
+        """Spawn a vehicle at coordinates for an online player via RMQ SpawnVehicleAt."""
+        cmd = {
+            "ServerCommand": "SpawnVehicleAt",
+            "PlayerId": hex_id,
+            "ClassName": class_name,
+            "X": float(x), "Y": float(y), "Z": float(z),
+            "Persistent": 1.0,
+        }
+        if faction:
+            cmd["Faction"] = faction
+        ok, result = self._publish_server_command(cmd)
+        if ok:
+            audit_logger.info(f"SPAWN_VEHICLE: hex={hex_id} class={class_name} x={x} y={y} z={z}")
+            return True, f"Spawn command sent for {class_name}"
+        return False, result
+
+    def service_broadcast(self, title, body, duration=30):
+        """Send a generic HUD overlay notification to all online players."""
+        try:
+            duration = int(duration)
+        except (ValueError, TypeError):
+            duration = 30
+        ok, result = self._publish_server_command({
+            "ServerCommand": "ServiceBroadcast",
+            "BroadcastType": "Generic",
+            "BroadcastPayload": {
+                "BroadcastDuration": duration,
+                "LocalizedText": [{"Key": "en", "Title": title, "Body": body}],
+            },
+        })
+        if ok:
+            audit_logger.info(f"SERVICE_BROADCAST: title={title!r} duration={duration}")
+            return True, "Broadcast sent"
+        return False, result
+
+    def shutdown_broadcast(self, shutdown_type, seconds_until, frequency=30, cancel=False):
+        """Send a structured server-shutdown countdown overlay to all players."""
+        import time as _time
+        try:
+            seconds_until = int(seconds_until)
+            frequency = int(frequency)
+        except (ValueError, TypeError):
+            return False, "Invalid seconds_until or frequency"
+        now = int(_time.time())
+        ok, result = self._publish_server_command({
+            "ServerCommand": "ServiceBroadcast",
+            "BroadcastType": "ServerShutdown",
+            "BroadcastPayload": {
+                "ShutdownType": shutdown_type,
+                "ShouldCancel": cancel,
+                "ShutdownTimestamp": now + seconds_until,
+                "BroadcastFrequency": frequency,
+                "ShutdownDuration": seconds_until,
+                "DateTimestamp": now + seconds_until,
+            },
+        })
+        if ok:
+            audit_logger.info(f"SHUTDOWN_BROADCAST: type={shutdown_type} seconds={seconds_until} cancel={cancel}")
+            return True, "Shutdown broadcast sent" if not cancel else "Shutdown cancelled"
+        return False, result
+
+    def teleport_to_player(self, source_player_id, target_player_id):
+        """Teleport source player to target player's current position (TeleportToExact)."""
+        import json as _json, base64 as _b64, time as _time
+        source_row = self.db.query("""
+            SELECT ea.platform_id, ps.online_status::text as online_status
+            FROM dune.player_state ps
+            JOIN dune.encrypted_accounts ea ON ea.id = ps.account_id
+            WHERE ps.player_controller_id = %s LIMIT 1
+        """, [source_player_id], one=True)
+        if not source_row:
+            return False, "Source player not found"
+        if str(source_row.get('online_status', '')).lower() != 'online':
+            return False, "Source player must be online for TeleportToExact"
+
+        target_row = self.db.query("""
+            SELECT ((a.transform).location).x as x,
+                   ((a.transform).location).y as y,
+                   ((a.transform).location).z as z
+            FROM dune.actors a
+            JOIN dune.player_state ps ON ps.player_pawn_id = a.id
+            WHERE ps.player_controller_id = %s LIMIT 1
+        """, [target_player_id], one=True)
+        if not target_row:
+            return False, "Target player position not found"
+
+        inner = _json.dumps({
+            "ServerCommand": "TeleportToExact",
+            "PlayerId": source_row['platform_id'],
+            "X": float(target_row['x'] or 0),
+            "Y": float(target_row['y'] or 0),
+            "Z": float(target_row['z'] or 0),
+        }, separators=(',', ':'))
+        outer = _json.dumps({"Version": 2, "AuthToken": "Nu6VmPWUMvdPMeB7qErr", "MessageContent": inner}, separators=(',', ':'))
+        outer_b64 = _b64.b64encode(outer.encode('utf-8')).decode('ascii')
+        msg_id = f"dashboard-cmd-{int(_time.time() * 1000)}"
+        erlang = (
+            f'Outer = base64:decode(<<"{outer_b64}">>),\n'
+            f'XName = rabbit_misc:r(<<"/">>, exchange, <<"heartbeats">>),\n'
+            f'X = rabbit_exchange:lookup_or_die(XName),\n'
+            f'MsgId = <<"{msg_id}">>,\n'
+            f'Tag = binary_to_atom(<<"P_basic">>, utf8),\n'
+            f'P = {{Tag, <<"Content">>, undefined, [], undefined, undefined, undefined, undefined, undefined, MsgId, undefined, undefined, <<"fls">>, <<"fls_backend">>, undefined}},\n'
+            f'Content = rabbit_basic:build_content(P, Outer),\n'
+            f'{{ok, Msg}} = rabbit_basic:message(XName, <<"notifications">>, Content),\n'
+            f'rabbit_queue_type:publish_at_most_once(X, Msg).\n'
+        )
+        ok, result = self._run_erlang_on_mq_game(erlang)
+        if ok:
+            audit_logger.info(f"TELEPORT_TO_PLAYER: source={source_player_id} target={target_player_id}")
+            return True, "Teleport command sent"
+        return False, result
